@@ -266,6 +266,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
   <div class="status-row">
     <div class="level-chip">⭐ Lv.<span id="levelNum">1</span></div>
     <div class="streak-chip">🔥 <span id="streakNum">0</span>日連続</div>
+    <button id="notifyBtn" class="streak-chip" style="border:none; cursor:pointer; font-family:inherit;">🔔</button>
   </div>
   <div class="xp-bar-wrap"><div class="xp-bar" id="xpBar" style="width:0%"></div></div>
   <div class="xp-label"><span id="xpText">0 / 100 XP</span></div>
@@ -508,6 +509,7 @@ tasksRef.on('value', snap => {
   tasks = snap.val() || {};
   renderList();
   renderGantt();
+  scheduleNotifications();
 });
 statsRef.on('value', snap => {
   const v = snap.val();
@@ -549,16 +551,83 @@ function roundTo10Min(d){
   rounded.setMinutes(Math.round(rounded.getMinutes()/10)*10);
   return rounded;
 }
-function getLatestPlanEnd(){
-  let latest = null;
-  Object.values(tasks).forEach(t => {
-    if (t.planEnd) {
-      const d = new Date(t.planEnd);
-      if (!latest || d > latest) latest = d;
+/* 直近の新規登録操作の記録（10分以内の連続登録判定に使用） */
+let lastRegisteredAt = null;
+let lastRegisteredPlanEnd = null;
+
+function getDefaultStartTime(){
+  const now = new Date();
+  const withinTenMin = lastRegisteredAt && ((now - lastRegisteredAt) <= 10*60*1000);
+  if (withinTenMin && lastRegisteredPlanEnd) {
+    return new Date(lastRegisteredPlanEnd);
+  }
+  return roundTo10Min(new Date(now.getTime() + 60*60*1000));
+}
+
+/* ---------- 開始15分前通知 ---------- */
+let scheduledNotifyTimers = {};
+const notifyBtn = document.getElementById('notifyBtn');
+
+function updateNotifyBtnLabel(){
+  if (!('Notification' in window)) {
+    notifyBtn.textContent = '🔕';
+    notifyBtn.title = 'この端末・ブラウザは通知に対応していません';
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    notifyBtn.textContent = '🔔 ON';
+    notifyBtn.title = '開始15分前に通知します（タップで詳細）';
+  } else if (Notification.permission === 'denied') {
+    notifyBtn.textContent = '🔕 OFF';
+    notifyBtn.title = '通知がブロックされています。ブラウザの設定から許可してください';
+  } else {
+    notifyBtn.textContent = '🔔 有効化';
+    notifyBtn.title = 'タップして通知を許可すると、開始15分前にお知らせします';
+  }
+}
+
+notifyBtn.addEventListener('click', () => {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then(() => {
+      updateNotifyBtnLabel();
+      scheduleNotifications();
+    });
+  } else if (Notification.permission === 'granted') {
+    alert('通知は有効です。予定開始の15分前にお知らせします。\n（このアプリを開いている間のみ通知されます）');
+  } else {
+    alert('通知がブロックされています。ブラウザ／端末の通知設定からこのサイトの通知を許可してください。');
+  }
+});
+
+function clearAllNotifyTimers(){
+  Object.values(scheduledNotifyTimers).forEach(tid => clearTimeout(tid));
+  scheduledNotifyTimers = {};
+}
+
+/* 予定開始15分前に通知をスケジュール（アプリを開いている間のみ有効） */
+function scheduleNotifications(){
+  clearAllNotifyTimers();
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = Date.now();
+  const maxAheadMs = 24 * 60 * 60 * 1000; // 24時間先まで先読みしてスケジュール
+  Object.entries(tasks).forEach(([id, t]) => {
+    if (t.done || !t.planStart) return;
+    const startMs = new Date(t.planStart).getTime();
+    const notifyMs = startMs - 15 * 60 * 1000;
+    const delay = notifyMs - now;
+    if (delay > 0 && delay <= maxAheadMs) {
+      scheduledNotifyTimers[id] = setTimeout(() => {
+        try {
+          new Notification('もうすぐ開始です ⏰', {
+            body: `${t.name}（${fmtTime(t.planStart)} 開始）`
+          });
+        } catch (e) { /* 通知生成に失敗した場合は無視 */ }
+      }, delay);
     }
   });
-  return latest;
 }
+updateNotifyBtnLabel();
 
 /* ---------- タブ切替 ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -599,8 +668,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.querySelectorAll('#weekdaySelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
   setDateMode('time');
-  const latestEnd = getLatestPlanEnd();
-  const start = latestEnd ? new Date(latestEnd) : roundTo10Min(new Date());
+  const start = getDefaultStartTime();
   const later = new Date(start.getTime() + 60*60*1000);
   document.getElementById('inputPlanStart').value = fmtDateTimeLocal(start);
   document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(later);
@@ -729,6 +797,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   if (isRepeatTimeMode && !repeatStartTime){ alert('開始時刻を入力してください'); return; }
 
   const rank = category === 'private' ? 'P' : rankInput.value;
+  const isNewTask = !currentEditId;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
   const weekday = repeatEnabled ? parseInt(weekdayInput.value, 10) : null;
@@ -766,6 +835,10 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   }
 
   saveTask(id, data);
+  if (isNewTask && data.planEnd) {
+    lastRegisteredAt = new Date();
+    lastRegisteredPlanEnd = data.planEnd;
+  }
   taskOverlay.classList.remove('show');
 });
 
