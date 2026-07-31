@@ -150,7 +150,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 
 /* Task list */
 .task-row{
-  display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line); cursor:pointer;
 }
 .task-row:last-child{ border-bottom:none; }
 .task-row.row-undated{ background: #F5F1FC; border-radius:10px; margin-bottom:2px; }
@@ -207,6 +207,9 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .rank-select label.rP.active{ background: var(--rankP-bg); border-color: var(--rankP); color: var(--rankP); }
 .rank-select label.catWork.active{ background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .rank-select label.catPrivate.active{ background: var(--rankP-bg); border-color: var(--rankP); color: var(--rankP); }
+.rank-select label.dmTime.active{ background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.rank-select label.dmDate.active{ background: #E3F5EC; border-color: var(--rankC); color: var(--rankC); }
+.rank-select label.dmNone.active{ background: #F5F1FC; border-color: var(--rankP); color: var(--rankP); }
 .row2{ display:flex; gap:10px; }
 .row2 .field{ flex:1; }
 .modal-actions{ display:flex; gap:10px; margin-top:16px; }
@@ -361,11 +364,13 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <label class="rD" data-rank="D"><input type="radio" name="rank" value="D"><span class="opt">D</span></label>
       </div>
     </div>
-    <div class="field" style="display:flex; align-items:center; gap:8px;">
-      <label style="margin:0; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; color:var(--ink-soft);">
-        <input type="checkbox" id="inputDateUndecided" style="width:auto;">
-        日時未定
-      </label>
+    <div class="field">
+      <label>日時設定</label>
+      <div class="rank-select" id="dateModeSelect">
+        <label class="dmTime" data-mode="time"><input type="radio" name="dateMode" value="time"><span class="opt">🕐 日時指定</span></label>
+        <label class="dmDate" data-mode="date"><input type="radio" name="dateMode" value="date"><span class="opt">📅 期日のみ</span></label>
+        <label class="dmNone" data-mode="undecided"><input type="radio" name="dateMode" value="undecided"><span class="opt">❔ 未定</span></label>
+      </div>
     </div>
     <div class="row2" id="planDateRow">
       <div class="field">
@@ -376,6 +381,10 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <label>予定終了</label>
         <input type="datetime-local" id="inputPlanEnd" step="600">
       </div>
+    </div>
+    <div class="field" id="dueDateRow" style="display:none;">
+      <label>期日</label>
+      <input type="date" id="inputDueDate">
     </div>
     <div class="field">
       <label>メモ（任意・URLはタップで開けます）</label>
@@ -489,6 +498,11 @@ function fmtTime(iso){
   const d = new Date(iso);
   return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
 }
+function fmtDateOnly(dateStr){
+  if(!dateStr) return '';
+  const [y,m,d] = dateStr.split('-');
+  return `${parseInt(m,10)}/${parseInt(d,10)}`;
+}
 function fmtDateTimeLocal(d){
   const pad = n => n.toString().padStart(2,'0');
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -538,11 +552,11 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.getElementById('modalTitle').textContent = 'やることを追加';
   document.getElementById('inputName').value = '';
   document.getElementById('inputMemo').value = '';
+  document.getElementById('inputDueDate').value = '';
   document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
-  document.getElementById('inputDateUndecided').checked = false;
-  document.getElementById('planDateRow').style.display = 'flex';
+  setDateMode('time');
   const latestEnd = getLatestPlanEnd();
   const start = latestEnd ? new Date(latestEnd) : roundTo10Min(new Date());
   const later = new Date(start.getTime() + 60*60*1000);
@@ -552,9 +566,18 @@ document.getElementById('fabAdd').addEventListener('click', () => {
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
 
-/* 日時未定チェック時は予定日時欄を隠す */
-document.getElementById('inputDateUndecided').addEventListener('change', (e) => {
-  document.getElementById('planDateRow').style.display = e.target.checked ? 'none' : 'flex';
+/* 日時設定（日時指定／期日のみ／未定）の切り替え */
+function setDateMode(mode){
+  document.querySelectorAll('#dateModeSelect label').forEach(l => {
+    const active = l.dataset.mode === mode;
+    l.classList.toggle('active', active);
+    l.querySelector('input').checked = active;
+  });
+  document.getElementById('planDateRow').style.display = (mode === 'time') ? 'flex' : 'none';
+  document.getElementById('dueDateRow').style.display = (mode === 'date') ? 'block' : 'none';
+}
+document.querySelectorAll('#dateModeSelect label').forEach(label => {
+  label.addEventListener('click', () => setDateMode(label.dataset.mode));
 });
 
 /* 予定開始を選択したら、予定終了を自動で1時間後にセット */
@@ -592,20 +615,24 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const categoryInput = document.querySelector('#categorySelect input:checked');
   const category = categoryInput ? categoryInput.value : 'work';
   const rankInput = document.querySelector('#rankSelect input:checked');
-  const dateUndecided = document.getElementById('inputDateUndecided').checked;
+  const dateModeInput = document.querySelector('#dateModeSelect input:checked');
+  const dateMode = dateModeInput ? dateModeInput.value : 'time';
   const planStart = document.getElementById('inputPlanStart').value;
   const planEnd = document.getElementById('inputPlanEnd').value;
+  const dueDate = document.getElementById('inputDueDate').value;
   const memo = document.getElementById('inputMemo').value.trim();
   if (!name){ alert('タスク名を入力してください'); return; }
   if (category === 'work' && !rankInput){ alert('優先順位を選択してください'); return; }
+  if (dateMode === 'date' && !dueDate){ alert('期日を選択してください'); return; }
   const rank = category === 'private' ? 'P' : rankInput.value;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
 
   const data = Object.assign({}, existing, {
     name, rank, category,
-    planStart: (!dateUndecided && planStart) ? new Date(planStart).toISOString() : null,
-    planEnd: (!dateUndecided && planEnd) ? new Date(planEnd).toISOString() : null,
+    planStart: (dateMode === 'time' && planStart) ? new Date(planStart).toISOString() : null,
+    planEnd: (dateMode === 'time' && planEnd) ? new Date(planEnd).toISOString() : null,
+    planDateOnly: (dateMode === 'date' && dueDate) ? dueDate : null,
     memo,
     done: existing.done || false,
     actualStart: existing.actualStart || null,
@@ -752,13 +779,14 @@ function renderList(){
     if (currentFilter !== 'ALL' && t.rank !== currentFilter) return false;
     return true;
   }).sort((a,b) => {
-    // 日時未定を最優先、その後未完了優先、その後ランク順、その後予定開始順
-    const aUndated = !a[1].planStart;
-    const bUndated = !b[1].planStart;
-    if (aUndated !== bUndated) return aUndated ? -1 : 1;
+    // 日時未定を最優先、次に期日のみ、その後日時指定。各グループ内は未完了優先、ランク順、日時順
+    const groupOf = t => t.planStart ? 2 : (t.planDateOnly ? 1 : 0);
+    const ga = groupOf(a[1]), gb = groupOf(b[1]);
+    if (ga !== gb) return ga - gb;
     if (a[1].done !== b[1].done) return a[1].done ? 1 : -1;
     const rOrder = { A:0, B:1, C:2, D:3, P:4 };
     if (rOrder[a[1].rank] !== rOrder[b[1].rank]) return rOrder[a[1].rank] - rOrder[b[1].rank];
+    if (ga === 1) return (a[1].planDateOnly||'').localeCompare(b[1].planDateOnly||'');
     return (a[1].planStart||'').localeCompare(b[1].planStart||'');
   });
 
@@ -766,10 +794,16 @@ function renderList(){
 
   todayTasks.forEach(([id, t]) => {
     const row = document.createElement('div');
-    const isOverdue = !t.done && t.planEnd && new Date(t.planEnd) < now;
-    const isUndated = !t.planStart;
+    const isOverdue = !t.done && (
+      (t.planEnd && new Date(t.planEnd) < now) ||
+      (t.planDateOnly && new Date(t.planDateOnly + 'T23:59:59') < now)
+    );
+    const isUndated = !t.planStart && !t.planDateOnly;
     row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '');
-    const planTxt = t.planStart ? `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}` : '日時未定';
+    let planTxt;
+    if (t.planStart) planTxt = `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}`;
+    else if (t.planDateOnly) planTxt = `期日 ${fmtDateOnly(t.planDateOnly)}`;
+    else planTxt = '日時未定';
     const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}` : '';
     const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
     row.innerHTML = `
@@ -781,16 +815,14 @@ function renderList(){
       </div>
       <div class="task-actions">
         <button class="icon-btn done-btn" title="${t.done ? '実績編集' : '実績記録'}">${t.done ? '📝' : '✓'}</button>
-        <button class="icon-btn edit-btn" title="編集">✎</button>
         <button class="icon-btn del-btn" title="削除">🗑</button>
       </div>
     `;
     const doneBtn = row.querySelector('.done-btn');
-    const editBtn = row.querySelector('.edit-btn');
     const delBtn = row.querySelector('.del-btn');
-    doneBtn.addEventListener('click', () => openActualModal(id));
-    editBtn.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
-    delBtn.addEventListener('click', () => deleteTask(id));
+    doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(id); });
+    row.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
     list.appendChild(row);
   });
 
@@ -845,11 +877,11 @@ function openEditModal(t){
     l.classList.toggle('active', active);
     l.querySelector('input').checked = active;
   });
-  const isUndecided = !t.planStart;
-  document.getElementById('inputDateUndecided').checked = isUndecided;
-  document.getElementById('planDateRow').style.display = isUndecided ? 'none' : 'flex';
+  const mode = t.planStart ? 'time' : (t.planDateOnly ? 'date' : 'undecided');
+  setDateMode(mode);
   document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
   document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
+  document.getElementById('inputDueDate').value = t.planDateOnly || '';
   taskOverlay.classList.add('show');
 }
 
@@ -875,7 +907,7 @@ function renderGantt(){
   body.innerHTML = '';
 
   const dayTasks = Object.entries(tasks).filter(([id, t]) => {
-    const d = t.planStart ? t.planStart.slice(0,10) : (t.actualStart ? t.actualStart.slice(0,10) : null);
+    const d = t.planStart ? t.planStart.slice(0,10) : (t.planDateOnly ? t.planDateOnly : (t.actualStart ? t.actualStart.slice(0,10) : null));
     return d === targetDate;
   }).sort((a,b) => (a[1].planStart||'').localeCompare(b[1].planStart||''));
 
@@ -896,6 +928,8 @@ function renderGantt(){
       const left = pctOfDay(t.planStart);
       const width = Math.max(1, pctOfDay(t.planEnd) - left);
       planBarHtml = `<div class="bar bar-plan" style="left:${left}%;width:${width}%;border-color:${color};"></div>`;
+    } else if (t.planDateOnly){
+      planBarHtml = `<div class="bar bar-plan" style="left:0%;width:100%;border-color:${color};"></div>`;
     }
     let actualBarHtml = '';
     if (t.actualStart && t.actualEnd){
