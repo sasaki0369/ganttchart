@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>やることガントチャート</title>
+
+<!-- ホーム画面追加用アイコン・PWA設定 -->
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQyIiBmaWxsPSIjRkY5NDVBIi8+PHJlY3QgeD0iMzYiIHk9IjUwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2ZmZmZmZiIvPjxyZWN0IHg9IjM2IiB5PSI4NyIgd2lkdGg9IjgwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI0ZGRTRENSIvPjxyZWN0IHg9IjM2IiB5PSIxMjQiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTgiIHJ4PSI5IiBmaWxsPSIjRkZFNEQ1Ii8+PGNpcmNsZSBjeD0iMTQ4IiBjeT0iOTYiIHI9IjIwIiBmaWxsPSIjNENBRjg3Ii8+PHBhdGggZD0iTTEzOSA5NmwtNiA2IDE1IC0xNSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQyIiBmaWxsPSIjRkY5NDVBIi8+PHJlY3QgeD0iMzYiIHk9IjUwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2ZmZmZmZiIvPjxyZWN0IHg9IjM2IiB5PSI4NyIgd2lkdGg9IjgwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI0ZGRTRENSIvPjxyZWN0IHg9IjM2IiB5PSIxMjQiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTgiIHJ4PSI5IiBmaWxsPSIjRkZFNEQ1Ii8+PGNpcmNsZSBjeD0iMTQ4IiBjeT0iOTYiIHI9IjIwIiBmaWxsPSIjNENBRjg3Ii8+PHBhdGggZD0iTTEzOSA5NmwtNiA2IDE1IC0xNSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="やることガント">
+<meta name="theme-color" content="#FF945A">
+
+<script>
+// PWA manifest をインラインで生成（1ファイル実装のため）
+const manifest = {
+  name: "やることガントチャート",
+  short_name: "やることガント",
+  start_url: "./index.html",
+  display: "standalone",
+  background_color: "#FFF8F0",
+  theme_color: "#FF945A",
+  icons: [{
+    src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQyIiBmaWxsPSIjRkY5NDVBIi8+PHJlY3QgeD0iMzYiIHk9IjUwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2ZmZmZmZiIvPjxyZWN0IHg9IjM2IiB5PSI4NyIgd2lkdGg9IjgwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI0ZGRTRENSIvPjxyZWN0IHg9IjM2IiB5PSIxMjQiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTgiIHJ4PSI5IiBmaWxsPSIjRkZFNEQ1Ii8+PGNpcmNsZSBjeD0iMTQ4IiBjeT0iOTYiIHI9IjIwIiBmaWxsPSIjNENBRjg3Ii8+PHBhdGggZD0iTTEzOSA5NmwtNiA2IDE1IC0xNSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==",
+    sizes: "192x192",
+    type: "image/svg+xml"
+  }]
+};
+const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+const manifestURL = URL.createObjectURL(manifestBlob);
+document.addEventListener('DOMContentLoaded', () => {
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = manifestURL;
+  document.head.appendChild(link);
+});
+</script>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+:root{
+  --bg: #FFF8F0;
+  --card: #FFFFFF;
+  --ink: #3E332C;
+  --ink-soft: #8A7D72;
+  --accent: #FF945A;
+  --accent-soft: #FFE4D5;
+  --line: #F0E4D8;
+  --rankA: #E85D5D;
+  --rankA-bg: #FDE7E7;
+  --rankB: #F0A93E;
+  --rankB-bg: #FCF0DA;
+  --rankC: #4CAF87;
+  --rankC-bg: #E3F5EC;
+  --rankD: #6C8CB0;
+  --rankD-bg: #E7EEF5;
+  --rankP: #8B6FD1;
+  --rankP-bg: #EDE7FA;
+  --shadow: 0 4px 14px rgba(62,51,44,0.08);
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+body{
+  margin:0;
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  padding-bottom: 90px;
+}
+header{
+  background: linear-gradient(135deg, var(--accent), #FFB27A);
+  color: #fff;
+  padding: 18px 16px 16px;
+  position: sticky; top:0; z-index: 50;
+  box-shadow: var(--shadow);
+}
+header h1{ margin:0; font-size: 19px; font-weight:800; letter-spacing:.02em; display:flex; align-items:center; gap:8px;}
+.status-row{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:10px; }
+.level-chip{
+  background: rgba(255,255,255,0.22);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight:700;
+  display:flex; align-items:center; gap:6px;
+}
+.streak-chip{
+  background: rgba(255,255,255,0.22);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight:700;
+}
+.xp-bar-wrap{
+  margin-top:10px; background: rgba(255,255,255,0.25); border-radius: 10px; height:10px; overflow:hidden;
+}
+.xp-bar{ height:100%; background:#fff; border-radius:10px; transition: width .5s ease; }
+.xp-label{ font-size:11px; margin-top:4px; opacity:.9; }
+
+nav.tabs{
+  display:flex; background:#fff; position:sticky; top: 108px; z-index:40;
+  border-bottom:1px solid var(--line); overflow-x:auto;
+}
+nav.tabs button{
+  flex:1; min-width:80px; border:none; background:none; padding:12px 6px; font-size:13px;
+  font-weight:700; color: var(--ink-soft); cursor:pointer; border-bottom: 3px solid transparent;
+  white-space:nowrap;
+}
+nav.tabs button.active{ color: var(--accent); border-bottom-color: var(--accent); }
+
+main{ padding: 14px; max-width: 900px; margin:0 auto; }
+.section{ display:none; }
+.section.active{ display:block; }
+
+.card{
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+}
+
+.encourage-banner{
+  background: linear-gradient(135deg, #FFF0E4, #FFE4D5);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight:700;
+  color:#8A4B1F;
+  display:flex; align-items:center; gap:10px;
+}
+.encourage-banner .emoji{ font-size:24px; }
+
+.day-progress{
+  display:flex; align-items:center; gap:10px; margin-bottom: 4px;
+}
+.day-progress .ring{
+  width:52px; height:52px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--accent);
+  background: conic-gradient(var(--accent) calc(var(--pct,0)*1%), var(--line) 0);
+}
+.day-progress .ring::before{
+  content:""; position:absolute;
+}
+.day-progress .ring span{ background:#fff; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+
+/* Task list */
+.task-row{
+  display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line);
+}
+.task-row:last-child{ border-bottom:none; }
+.rank-badge{
+  width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:14px;
+}
+.task-main{ flex:1; min-width:0; }
+.task-name{ font-weight:700; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.task-name.done{ text-decoration: line-through; color: var(--ink-soft); }
+.task-meta{ font-size:11.5px; color: var(--ink-soft); margin-top:2px; }
+.task-actions{ display:flex; gap:6px; flex-shrink:0; }
+.icon-btn{
+  border:none; background: var(--accent-soft); color:var(--accent); width:32px; height:32px; border-radius:9px;
+  font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.icon-btn.done-btn{ background:#E3F5EC; color: var(--rankC); }
+.icon-btn.del-btn{ background:#FDE7E7; color: var(--rankA); }
+
+.fab{
+  position:fixed; right:20px; bottom:24px; width:58px; height:58px; border-radius:50%;
+  background: var(--accent); color:#fff; border:none; font-size:28px; box-shadow: 0 6px 18px rgba(255,148,90,0.5);
+  cursor:pointer; z-index:60; display:flex; align-items:center; justify-content:center;
+}
+
+/* Modal */
+.overlay{
+  position:fixed; inset:0; background:rgba(62,51,44,0.4); display:none; align-items:flex-end; justify-content:center; z-index:100;
+}
+.overlay.show{ display:flex; }
+.modal{
+  background:#fff; width:100%; max-width:520px; border-radius: 20px 20px 0 0; padding:20px; max-height:88vh; overflow-y:auto;
+  animation: slideup .25s ease;
+}
+@keyframes slideup{ from{ transform:translateY(30px); opacity:0;} to{ transform:translateY(0); opacity:1;} }
+.modal h2{ margin:0 0 14px; font-size:17px; }
+.field{ margin-bottom:12px; }
+.field label{ display:block; font-size:12.5px; font-weight:700; color: var(--ink-soft); margin-bottom:5px; }
+.field input, .field select, .field textarea{
+  width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); font-size:14px; font-family:inherit; background:#FFFBF7;
+}
+.rank-select{ display:flex; gap:8px; }
+.rank-select label{ flex:1; text-align:center; padding:10px 0; border-radius:10px; border:1.5px solid var(--line); font-weight:800; cursor:pointer; font-size:14px; margin:0; color: var(--ink-soft);}
+.rank-select input{ display:none; }
+.rank-select input:checked + span{ }
+.rank-select .opt{ display:block; }
+.rank-select label.rA.active{ background: var(--rankA-bg); border-color: var(--rankA); color: var(--rankA); }
+.rank-select label.rB.active{ background: var(--rankB-bg); border-color: var(--rankB); color: var(--rankB); }
+.rank-select label.rC.active{ background: var(--rankC-bg); border-color: var(--rankC); color: var(--rankC); }
+.rank-select label.rD.active{ background: var(--rankD-bg); border-color: var(--rankD); color: var(--rankD); }
+.rank-select label.rP.active{ background: var(--rankP-bg); border-color: var(--rankP); color: var(--rankP); }
+.rank-select label.catWork.active{ background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.rank-select label.catPrivate.active{ background: var(--rankP-bg); border-color: var(--rankP); color: var(--rankP); }
+.row2{ display:flex; gap:10px; }
+.row2 .field{ flex:1; }
+.modal-actions{ display:flex; gap:10px; margin-top:16px; }
+.btn{ flex:1; padding:13px; border-radius:12px; border:none; font-weight:800; font-size:15px; cursor:pointer; }
+.btn.primary{ background: var(--accent); color:#fff; }
+.btn.secondary{ background: var(--line); color: var(--ink-soft); }
+
+/* Gantt */
+.gantt-wrap{ overflow-x:auto; }
+.gantt-header-row{ display:flex; border-bottom:2px solid var(--line); padding-bottom:6px; margin-bottom:4px; }
+.gantt-label-col{ width:120px; flex-shrink:0; font-size:11px; font-weight:700; color:var(--ink-soft); }
+.gantt-timeline{ display:flex; flex:1; min-width:480px; }
+.gantt-hour{ flex:1; text-align:center; font-size:10px; color:var(--ink-soft); border-left:1px solid var(--line); }
+.gantt-row{ display:flex; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); }
+.gantt-row:last-child{ border-bottom:none; }
+.gantt-name{ width:120px; flex-shrink:0; font-size:12.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:6px; }
+.gantt-track{ flex:1; min-width:480px; position:relative; height:34px; background: repeating-linear-gradient(to right, transparent, transparent calc(100%/24 - 1px), var(--line) calc(100%/24 - 1px), var(--line) calc(100%/24)); border-radius:6px; }
+.bar{ position:absolute; height:11px; border-radius:6px; top:2px; }
+.bar.actual{ top:18px; }
+.bar-plan{ opacity:0.45; border:1.5px dashed; background:transparent !important; }
+
+.empty-hint{ text-align:center; color: var(--ink-soft); font-size:13px; padding:30px 10px; }
+
+/* Achievements */
+.badge-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+.badge{ background:#fff; border-radius:14px; padding:12px 6px; text-align:center; box-shadow: var(--shadow); opacity:0.35; }
+.badge.unlocked{ opacity:1; }
+.badge .b-emoji{ font-size:26px; }
+.badge .b-name{ font-size:11px; font-weight:700; margin-top:4px; color: var(--ink-soft); }
+.badge.unlocked .b-name{ color: var(--ink); }
+
+.stat-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:10px; margin-bottom:14px; }
+.stat-box{ background:#fff; border-radius:14px; padding:12px; text-align:center; box-shadow: var(--shadow); }
+.stat-box .num{ font-size:20px; font-weight:800; color: var(--accent); }
+.stat-box .lbl{ font-size:11px; color: var(--ink-soft); margin-top:2px; }
+
+.confetti-canvas{ position:fixed; inset:0; pointer-events:none; z-index: 200; }
+
+.filter-bar{ display:flex; gap:6px; margin-bottom:10px; overflow-x:auto; }
+.filter-chip{ padding:6px 12px; border-radius:16px; background:#fff; border:1.5px solid var(--line); font-size:12px; font-weight:700; color:var(--ink-soft); white-space:nowrap; cursor:pointer; }
+.filter-chip.active{ background: var(--accent); border-color:var(--accent); color:#fff; }
+
+.section-title{ font-size:13px; font-weight:800; color: var(--ink-soft); margin: 4px 0 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 やることガントチャート</h1>
+  <div class="status-row">
+    <div class="level-chip">⭐ Lv.<span id="levelNum">1</span></div>
+    <div class="streak-chip">🔥 <span id="streakNum">0</span>日連続</div>
+  </div>
+  <div class="xp-bar-wrap"><div class="xp-bar" id="xpBar" style="width:0%"></div></div>
+  <div class="xp-label"><span id="xpText">0 / 100 XP</span></div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="list">📋 リスト</button>
+  <button class="tab-btn" data-tab="gantt">📊 ガント</button>
+  <button class="tab-btn" data-tab="achieve">🏆 達成状況</button>
+</nav>
+
+<main>
+
+  <!-- リスト管理 -->
+  <section class="section active" id="tab-list">
+    <div class="encourage-banner" id="encourageBanner">
+      <span class="emoji">✨</span>
+      <span id="encourageText">今日も一日がんばりましょう！</span>
+    </div>
+
+    <div class="card">
+      <div class="day-progress">
+        <div class="ring" id="dayRing" style="--pct:0"><span id="dayPct">0%</span></div>
+        <div style="flex:1">
+          <div class="section-title" style="margin:0;">今日の達成率</div>
+          <div style="font-size:12px; color:var(--ink-soft);"><span id="doneCount">0</span>/<span id="totalCount">0</span> 件完了</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-chip active" data-rank="ALL">すべて</div>
+      <div class="filter-chip" data-rank="A">A</div>
+      <div class="filter-chip" data-rank="B">B</div>
+      <div class="filter-chip" data-rank="C">C</div>
+      <div class="filter-chip" data-rank="D">D</div>
+      <div class="filter-chip" data-rank="P">🏠 プライベート</div>
+    </div>
+
+    <div class="card" id="taskListCard">
+      <div class="empty-hint" id="emptyHint">やることがありません。右下の＋ボタンから追加しましょう。</div>
+      <div id="taskList"></div>
+    </div>
+  </section>
+
+  <!-- ガントチャート -->
+  <section class="section" id="tab-gantt">
+    <div class="card">
+      <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>本日のガントチャート（予定＝点線 / 実績＝実線）</span>
+        <input type="date" id="ganttDate" style="border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:12px;">
+      </div>
+      <div class="gantt-wrap">
+        <div class="gantt-header-row">
+          <div class="gantt-label-col"></div>
+          <div class="gantt-timeline" id="ganttHours"></div>
+        </div>
+        <div id="ganttBody"></div>
+      </div>
+      <div class="empty-hint" id="ganttEmptyHint" style="display:none;">この日の予定はありません。</div>
+    </div>
+  </section>
+
+  <!-- 達成状況 -->
+  <section class="section" id="tab-achieve">
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num" id="statTotalDone">0</div><div class="lbl">総完了数</div></div>
+      <div class="stat-box"><div class="num" id="statOnTime">0%</div><div class="lbl">時間内達成率</div></div>
+      <div class="stat-box"><div class="num" id="statBestStreak">0</div><div class="lbl">最長連続記録</div></div>
+    </div>
+    <div class="section-title">バッジコレクション</div>
+    <div class="badge-grid" id="badgeGrid"></div>
+  </section>
+
+</main>
+
+<button class="fab" id="fabAdd">＋</button>
+
+<!-- タスク追加/編集モーダル -->
+<div class="overlay" id="taskOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">やることを追加</h2>
+    <div class="field">
+      <label>タスク名</label>
+      <input type="text" id="inputName" placeholder="例：企画書を作成する">
+    </div>
+    <div class="field">
+      <label>種別</label>
+      <div class="rank-select" id="categorySelect">
+        <label class="catWork" data-cat="work"><input type="radio" name="category" value="work"><span class="opt">💼 仕事</span></label>
+        <label class="catPrivate" data-cat="private"><input type="radio" name="category" value="private"><span class="opt">🏠 プライベート</span></label>
+      </div>
+    </div>
+    <div class="field" id="rankField">
+      <label>優先順位</label>
+      <div class="rank-select" id="rankSelect">
+        <label class="rA" data-rank="A"><input type="radio" name="rank" value="A"><span class="opt">A</span></label>
+        <label class="rB" data-rank="B"><input type="radio" name="rank" value="B"><span class="opt">B</span></label>
+        <label class="rC" data-rank="C"><input type="radio" name="rank" value="C"><span class="opt">C</span></label>
+        <label class="rD" data-rank="D"><input type="radio" name="rank" value="D"><span class="opt">D</span></label>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>予定開始</label>
+        <input type="datetime-local" id="inputPlanStart">
+      </div>
+      <div class="field">
+        <label>予定終了</label>
+        <input type="datetime-local" id="inputPlanEnd">
+      </div>
+    </div>
+    <div class="field">
+      <label>メモ（任意）</label>
+      <textarea id="inputMemo" rows="2" placeholder="補足事項があれば"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="cancelTaskBtn">キャンセル</button>
+      <button class="btn primary" id="saveTaskBtn">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 実績入力モーダル -->
+<div class="overlay" id="actualOverlay">
+  <div class="modal">
+    <h2>実績を記録</h2>
+    <div class="field" style="font-weight:700;" id="actualTaskName"></div>
+    <div class="row2">
+      <div class="field">
+        <label>実績開始</label>
+        <input type="datetime-local" id="inputActualStart">
+      </div>
+      <div class="field">
+        <label>実績終了</label>
+        <input type="datetime-local" id="inputActualEnd">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="cancelActualBtn">キャンセル</button>
+      <button class="btn primary" id="saveActualBtn">完了として記録 🎉</button>
+    </div>
+  </div>
+</div>
+
+<canvas class="confetti-canvas" id="confettiCanvas" style="display:none;"></canvas>
+
+<script>
+/* ========================================================
+   Firebase 設定
+   ※ご自身のFirebaseプロジェクトの設定値に置き換えてください
+   ======================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAnTMERwL4xsOyW6ZMySkf95SdqS2eBQac",
+  authDomain: "gantt--chart.firebaseapp.com",
+  databaseURL: "https://gantt--chart-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "gantt--chart",
+  storageBucket: "gantt--chart.firebasestorage.app",
+  messagingSenderId: "244458558095",
+  appId: "1:244458558095:web:dc82d4a8835fbfef8116fa"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const tasksRef = db.ref('tasks');
+const statsRef = db.ref('stats');
+
+const RANK_COLOR = { A: '#E85D5D', B: '#F0A93E', C: '#4CAF87', D: '#6C8CB0', P: '#8B6FD1' };
+const RANK_BG    = { A: '#FDE7E7', B: '#FCF0DA', C: '#E3F5EC', D: '#E7EEF5', P: '#EDE7FA' };
+const RANK_POINT = { A: 30, B: 20, C: 12, D: 6, P: 10 };
+
+const BADGES = [
+  { id:'first', emoji:'🌱', name:'はじめの一歩', cond: s => s.totalDone >= 1 },
+  { id:'ten',   emoji:'🎯', name:'10件達成', cond: s => s.totalDone >= 10 },
+  { id:'fifty', emoji:'🏅', name:'50件達成', cond: s => s.totalDone >= 50 },
+  { id:'streak3', emoji:'🔥', name:'3日連続', cond: s => s.bestStreak >= 3 },
+  { id:'streak7', emoji:'🔥🔥', name:'7日連続', cond: s => s.bestStreak >= 7 },
+  { id:'streak30', emoji:'👑', name:'30日連続', cond: s => s.bestStreak >= 30 },
+  { id:'levelUp', emoji:'⭐', name:'レベル5到達', cond: s => s.level >= 5 },
+  { id:'rankA10', emoji:'💎', name:'Aランク10件', cond: s => s.rankADone >= 10 },
+  { id:'ontime',  emoji:'⏱️', name:'時間内達成率80%', cond: s => s.totalDone >= 5 && (s.onTimeCount / s.totalDone) >= 0.8 },
+];
+
+const ENCOURAGE_MSGS = {
+  zero: ["今日も一日がんばりましょう！", "小さな一歩から始めましょう ✨", "まずは1つ、片付けてみましょう"],
+  some: ["いい調子です！この勢いで続けましょう 🔥", "順調に進んでいます！", "その調子、あと少し！"],
+  half: ["半分達成！ここからが本番です 💪", "折り返し地点、いいペースです！"],
+  most: ["もうすぐ全部終わります！ラストスパート 🚀", "あと少しで完全制覇です！"],
+  all:  ["全部達成しました！お見事です 🎉🎉", "パーフェクト！今日のあなたは最高です 👑"]
+};
+
+let tasks = {};
+let stats = { xp:0, level:1, streak:0, bestStreak:0, lastDoneDate:null, totalDone:0, onTimeCount:0, rankADone:0, badges:{} };
+let currentEditId = null;
+let currentActualId = null;
+let currentFilter = 'ALL';
+
+/* ---------- Firebase 同期 ---------- */
+tasksRef.on('value', snap => {
+  tasks = snap.val() || {};
+  renderList();
+  renderGantt();
+});
+statsRef.on('value', snap => {
+  const v = snap.val();
+  if (v) stats = Object.assign(stats, v);
+  renderStats();
+});
+
+function saveTask(id, data){
+  tasksRef.child(id).set(data);
+}
+function saveStats(){
+  statsRef.set(stats);
+}
+
+/* ---------- ユーティリティ ---------- */
+function uid(){ return 't' + Date.now() + Math.floor(Math.random()*1000); }
+function todayStr(){ const d = new Date(); return d.toISOString().slice(0,10); }
+function fmtTime(iso){
+  if(!iso) return '--:--';
+  const d = new Date(iso);
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+}
+function fmtDateTimeLocal(d){
+  const pad = n => n.toString().padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/* ---------- タブ切替 ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'gantt') renderGantt();
+  });
+});
+
+/* ---------- フィルタ ---------- */
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    currentFilter = chip.dataset.rank;
+    renderList();
+  });
+});
+
+/* ---------- タスク追加モーダル ---------- */
+const taskOverlay = document.getElementById('taskOverlay');
+document.getElementById('fabAdd').addEventListener('click', () => {
+  currentEditId = null;
+  document.getElementById('modalTitle').textContent = 'やることを追加';
+  document.getElementById('inputName').value = '';
+  document.getElementById('inputMemo').value = '';
+  document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
+  document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
+  setCategory('work');
+  const now = new Date();
+  const later = new Date(now.getTime() + 60*60*1000);
+  document.getElementById('inputPlanStart').value = fmtDateTimeLocal(now);
+  document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(later);
+  taskOverlay.classList.add('show');
+});
+document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
+
+document.querySelectorAll('#rankSelect label').forEach(label => {
+  label.addEventListener('click', () => {
+    document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
+    label.classList.add('active');
+    label.querySelector('input').checked = true;
+  });
+});
+
+/* 種別（仕事／プライベート）トグル：プライベート選択時は優先順位を隠す */
+function setCategory(cat){
+  document.querySelectorAll('#categorySelect label').forEach(l => {
+    const active = l.dataset.cat === cat;
+    l.classList.toggle('active', active);
+    l.querySelector('input').checked = active;
+  });
+  document.getElementById('rankField').style.display = (cat === 'private') ? 'none' : 'block';
+}
+document.querySelectorAll('#categorySelect label').forEach(label => {
+  label.addEventListener('click', () => setCategory(label.dataset.cat));
+});
+
+document.getElementById('saveTaskBtn').addEventListener('click', () => {
+  const name = document.getElementById('inputName').value.trim();
+  const categoryInput = document.querySelector('#categorySelect input:checked');
+  const category = categoryInput ? categoryInput.value : 'work';
+  const rankInput = document.querySelector('#rankSelect input:checked');
+  const planStart = document.getElementById('inputPlanStart').value;
+  const planEnd = document.getElementById('inputPlanEnd').value;
+  const memo = document.getElementById('inputMemo').value.trim();
+  if (!name){ alert('タスク名を入力してください'); return; }
+  if (category === 'work' && !rankInput){ alert('優先順位を選択してください'); return; }
+  const rank = category === 'private' ? 'P' : rankInput.value;
+  const id = currentEditId || uid();
+  const existing = tasks[id] || {};
+  const data = Object.assign({}, existing, {
+    name, rank, category,
+    planStart: planStart ? new Date(planStart).toISOString() : null,
+    planEnd: planEnd ? new Date(planEnd).toISOString() : null,
+    memo,
+    done: existing.done || false,
+    actualStart: existing.actualStart || null,
+    actualEnd: existing.actualEnd || null,
+    createdAt: existing.createdAt || new Date().toISOString()
+  });
+  saveTask(id, data);
+  taskOverlay.classList.remove('show');
+});
+
+/* ---------- 実績入力モーダル ---------- */
+const actualOverlay = document.getElementById('actualOverlay');
+document.getElementById('cancelActualBtn').addEventListener('click', () => actualOverlay.classList.remove('show'));
+
+function openActualModal(id){
+  currentActualId = id;
+  const t = tasks[id];
+  document.getElementById('actualTaskName').textContent = t.name;
+  const now = new Date();
+  document.getElementById('inputActualStart').value = t.actualStart ? fmtDateTimeLocal(new Date(t.actualStart)) : (t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : fmtDateTimeLocal(now));
+  document.getElementById('inputActualEnd').value = fmtDateTimeLocal(now);
+  actualOverlay.classList.add('show');
+}
+
+document.getElementById('saveActualBtn').addEventListener('click', () => {
+  const id = currentActualId;
+  const t = tasks[id];
+  const actualStart = document.getElementById('inputActualStart').value;
+  const actualEnd = document.getElementById('inputActualEnd').value;
+  if (!actualStart || !actualEnd){ alert('開始・終了時刻を入力してください'); return; }
+  const wasDone = t.done;
+  const data = Object.assign({}, t, {
+    actualStart: new Date(actualStart).toISOString(),
+    actualEnd: new Date(actualEnd).toISOString(),
+    done: true
+  });
+  saveTask(id, data);
+  actualOverlay.classList.remove('show');
+  if (!wasDone) onTaskCompleted(t, data);
+});
+
+/* ---------- タスク削除 ---------- */
+function deleteTask(id){
+  if (confirm('このタスクを削除しますか？')) tasksRef.child(id).remove();
+}
+
+/* ---------- ゲーミフィケーション ---------- */
+function onTaskCompleted(before, after){
+  const rank = after.rank;
+  const points = RANK_POINT[rank] || 10;
+  const onTime = after.planEnd ? (new Date(after.actualEnd) <= new Date(after.planEnd)) : true;
+
+  stats.xp += points;
+  stats.totalDone = (stats.totalDone || 0) + 1;
+  if (onTime) stats.onTimeCount = (stats.onTimeCount || 0) + 1;
+  if (rank === 'A') stats.rankADone = (stats.rankADone || 0) + 1;
+
+  // レベル計算（レベルnに必要な累積XP = n*100）
+  while (stats.xp >= stats.level * 100) {
+    stats.level += 1;
+  }
+
+  // 連続達成日数（今日初めての完了なら更新）
+  const today = todayStr();
+  if (stats.lastDoneDate !== today) {
+    const yest = new Date(); yest.setDate(yest.getDate()-1);
+    const yestStr = yest.toISOString().slice(0,10);
+    stats.streak = (stats.lastDoneDate === yestStr) ? (stats.streak || 0) + 1 : 1;
+    stats.lastDoneDate = today;
+    stats.bestStreak = Math.max(stats.bestStreak || 0, stats.streak);
+  }
+
+  // バッジ判定
+  let newBadge = null;
+  BADGES.forEach(b => {
+    if (!stats.badges) stats.badges = {};
+    if (!stats.badges[b.id] && b.cond(stats)) {
+      stats.badges[b.id] = true;
+      newBadge = b;
+    }
+  });
+
+  saveStats();
+  fireConfetti();
+  if (newBadge) {
+    setTimeout(() => alert(`🏆 新しいバッジ獲得！\n${newBadge.emoji} ${newBadge.name}`), 400);
+  }
+}
+
+/* ---------- 描画：応援バナー・達成率 ---------- */
+function renderStats(){
+  document.getElementById('levelNum').textContent = stats.level || 1;
+  document.getElementById('streakNum').textContent = stats.streak || 0;
+  const xpInLevel = stats.xp - ((stats.level-1) * 100);
+  const xpNeeded = 100;
+  document.getElementById('xpBar').style.width = Math.min(100, (xpInLevel/xpNeeded)*100) + '%';
+  document.getElementById('xpText').textContent = `${xpInLevel} / ${xpNeeded} XP`;
+
+  document.getElementById('statTotalDone').textContent = stats.totalDone || 0;
+  const onTimePct = stats.totalDone ? Math.round((stats.onTimeCount||0)/stats.totalDone*100) : 0;
+  document.getElementById('statOnTime').textContent = onTimePct + '%';
+  document.getElementById('statBestStreak').textContent = stats.bestStreak || 0;
+
+  const grid = document.getElementById('badgeGrid');
+  grid.innerHTML = '';
+  BADGES.forEach(b => {
+    const unlocked = stats.badges && stats.badges[b.id];
+    const el = document.createElement('div');
+    el.className = 'badge' + (unlocked ? ' unlocked' : '');
+    el.innerHTML = `<div class="b-emoji">${b.emoji}</div><div class="b-name">${b.name}</div>`;
+    grid.appendChild(el);
+  });
+}
+
+function renderList(){
+  const list = document.getElementById('taskList');
+  const emptyHint = document.getElementById('emptyHint');
+  list.innerHTML = '';
+
+  const todayTasks = Object.entries(tasks).filter(([id,t]) => {
+    if (currentFilter !== 'ALL' && t.rank !== currentFilter) return false;
+    return true;
+  }).sort((a,b) => {
+    // 未完了優先、その後ランク順、その後予定開始順
+    if (a[1].done !== b[1].done) return a[1].done ? 1 : -1;
+    const rOrder = { A:0, B:1, C:2, D:3, P:4 };
+    if (rOrder[a[1].rank] !== rOrder[b[1].rank]) return rOrder[a[1].rank] - rOrder[b[1].rank];
+    return (a[1].planStart||'').localeCompare(b[1].planStart||'');
+  });
+
+  emptyHint.style.display = todayTasks.length ? 'none' : 'block';
+
+  todayTasks.forEach(([id, t]) => {
+    const row = document.createElement('div');
+    row.className = 'task-row';
+    const planTxt = t.planStart ? `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}` : '未設定';
+    const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}` : '';
+    row.innerHTML = `
+      <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : t.rank}</div>
+      <div class="task-main">
+        <div class="task-name ${t.done?'done':''}">${escapeHtml(t.name)}</div>
+        <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
+      </div>
+      <div class="task-actions">
+        ${!t.done ? `<button class="icon-btn done-btn" title="実績記録">✓</button>` : `<button class="icon-btn" title="編集">✎</button>`}
+        <button class="icon-btn del-btn" title="削除">🗑</button>
+      </div>
+    `;
+    const [doneBtn, delBtn] = row.querySelectorAll('.task-actions button');
+    doneBtn.addEventListener('click', () => {
+      if (!t.done) openActualModal(id);
+      else { currentEditId = id; openEditModal(t); }
+    });
+    delBtn.addEventListener('click', () => deleteTask(id));
+    list.appendChild(row);
+  });
+
+  // 今日の達成率
+  const all = Object.values(tasks);
+  const total = all.length;
+  const done = all.filter(t => t.done).length;
+  const pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('dayRing').style.setProperty('--pct', pct);
+  document.getElementById('dayPct').textContent = pct + '%';
+  document.getElementById('doneCount').textContent = done;
+  document.getElementById('totalCount').textContent = total;
+
+  // 応援メッセージ
+  let bucket = 'zero';
+  if (pct >= 100 && total > 0) bucket = 'all';
+  else if (pct >= 70) bucket = 'most';
+  else if (pct >= 40) bucket = 'half';
+  else if (pct > 0) bucket = 'some';
+  const msgs = ENCOURAGE_MSGS[bucket];
+  document.getElementById('encourageText').textContent = msgs[Math.floor(Math.random()*msgs.length)];
+  document.querySelector('.encourage-banner .emoji').textContent = bucket === 'all' ? '🎉' : (bucket === 'most' ? '🚀' : (bucket === 'half' ? '💪' : '✨'));
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ---------- 編集モーダル（完了済みタスクの修正用） ---------- */
+function openEditModal(t){
+  document.getElementById('modalTitle').textContent = 'やることを編集';
+  document.getElementById('inputName').value = t.name;
+  document.getElementById('inputMemo').value = t.memo || '';
+  setCategory(t.category || (t.rank === 'P' ? 'private' : 'work'));
+  document.querySelectorAll('#rankSelect label').forEach(l => {
+    const active = l.dataset.rank === t.rank;
+    l.classList.toggle('active', active);
+    l.querySelector('input').checked = active;
+  });
+  document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
+  document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
+  taskOverlay.classList.add('show');
+}
+
+/* ---------- ガントチャート描画 ---------- */
+document.getElementById('ganttDate').addEventListener('change', renderGantt);
+
+function renderGantt(){
+  const dateInput = document.getElementById('ganttDate');
+  if (!dateInput.value) dateInput.value = todayStr();
+  const targetDate = dateInput.value;
+
+  const hoursWrap = document.getElementById('ganttHours');
+  hoursWrap.innerHTML = '';
+  for (let h = 0; h < 24; h += 2){
+    const el = document.createElement('div');
+    el.className = 'gantt-hour';
+    el.style.flex = '2';
+    el.textContent = h + '時';
+    hoursWrap.appendChild(el);
+  }
+
+  const body = document.getElementById('ganttBody');
+  body.innerHTML = '';
+
+  const dayTasks = Object.entries(tasks).filter(([id, t]) => {
+    const d = t.planStart ? t.planStart.slice(0,10) : (t.actualStart ? t.actualStart.slice(0,10) : null);
+    return d === targetDate;
+  }).sort((a,b) => (a[1].planStart||'').localeCompare(b[1].planStart||''));
+
+  document.getElementById('ganttEmptyHint').style.display = dayTasks.length ? 'none' : 'block';
+
+  function pctOfDay(iso){
+    const d = new Date(iso);
+    return ((d.getHours()*60 + d.getMinutes()) / (24*60)) * 100;
+  }
+
+  dayTasks.forEach(([id, t]) => {
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
+    const color = RANK_COLOR[t.rank] || '#999';
+
+    let planBarHtml = '';
+    if (t.planStart && t.planEnd){
+      const left = pctOfDay(t.planStart);
+      const width = Math.max(1, pctOfDay(t.planEnd) - left);
+      planBarHtml = `<div class="bar bar-plan" style="left:${left}%;width:${width}%;border-color:${color};"></div>`;
+    }
+    let actualBarHtml = '';
+    if (t.actualStart && t.actualEnd){
+      const left = pctOfDay(t.actualStart);
+      const width = Math.max(1, pctOfDay(t.actualEnd) - left);
+      actualBarHtml = `<div class="bar actual" style="left:${left}%;width:${width}%;background:${color};"></div>`;
+    }
+
+    row.innerHTML = `
+      <div class="gantt-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
+      <div class="gantt-track">${planBarHtml}${actualBarHtml}</div>
+    `;
+    body.appendChild(row);
+  });
+}
+
+/* ---------- 達成演出：簡易紙吹雪 ---------- */
+function fireConfetti(){
+  const canvas = document.getElementById('confettiCanvas');
+  canvas.style.display = 'block';
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+  const colors = ['#FF945A', '#4CAF87', '#F0A93E', '#E85D5D', '#6C8CB0'];
+  const particles = Array.from({length: 80}, () => ({
+    x: Math.random()*canvas.width,
+    y: -20 - Math.random()*200,
+    r: 4 + Math.random()*5,
+    c: colors[Math.floor(Math.random()*colors.length)],
+    vy: 2 + Math.random()*3,
+    vx: -1.5 + Math.random()*3,
+    rot: Math.random()*360
+  }));
+  let frame = 0;
+  function tick(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    particles.forEach(p => {
+      p.y += p.vy; p.x += p.vx; p.rot += 6;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot * Math.PI/180);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.r/2, -p.r/2, p.r, p.r*1.6);
+      ctx.restore();
+    });
+    frame++;
+    if (frame < 90) requestAnimationFrame(tick);
+    else { canvas.style.display = 'none'; ctx.clearRect(0,0,canvas.width,canvas.height); }
+  }
+  tick();
+}
+
+/* ---------- 初期化 ---------- */
+document.getElementById('ganttDate').value = todayStr();
+renderList();
+renderGantt();
+renderStats();
+</script>
+</body>
+</html>
