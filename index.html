@@ -360,11 +360,21 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
     <div class="row2">
       <div class="field">
         <label>予定開始</label>
-        <input type="datetime-local" id="inputPlanStart">
+        <input type="datetime-local" id="inputPlanStart" step="600">
       </div>
       <div class="field">
         <label>予定終了</label>
-        <input type="datetime-local" id="inputPlanEnd">
+        <input type="datetime-local" id="inputPlanEnd" step="600">
+      </div>
+    </div>
+    <div class="row2" id="actualEditField" style="display:none;">
+      <div class="field">
+        <label>実績開始</label>
+        <input type="datetime-local" id="inputEditActualStart" step="600">
+      </div>
+      <div class="field">
+        <label>実績終了</label>
+        <input type="datetime-local" id="inputEditActualEnd" step="600">
       </div>
     </div>
     <div class="field">
@@ -386,11 +396,11 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
     <div class="row2">
       <div class="field">
         <label>実績開始</label>
-        <input type="datetime-local" id="inputActualStart">
+        <input type="datetime-local" id="inputActualStart" step="600">
       </div>
       <div class="field">
         <label>実績終了</label>
-        <input type="datetime-local" id="inputActualEnd">
+        <input type="datetime-local" id="inputActualEnd" step="600">
       </div>
     </div>
     <div class="modal-actions">
@@ -482,6 +492,22 @@ function fmtDateTimeLocal(d){
   const pad = n => n.toString().padStart(2,'0');
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+function roundTo10Min(d){
+  const rounded = new Date(d);
+  rounded.setSeconds(0,0);
+  rounded.setMinutes(Math.round(rounded.getMinutes()/10)*10);
+  return rounded;
+}
+function getLatestPlanEnd(){
+  let latest = null;
+  Object.values(tasks).forEach(t => {
+    if (t.planEnd) {
+      const d = new Date(t.planEnd);
+      if (!latest || d > latest) latest = d;
+    }
+  });
+  return latest;
+}
 
 /* ---------- タブ切替 ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -514,13 +540,35 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
-  const now = new Date();
-  const later = new Date(now.getTime() + 60*60*1000);
-  document.getElementById('inputPlanStart').value = fmtDateTimeLocal(now);
+  document.getElementById('actualEditField').style.display = 'none';
+  document.getElementById('inputEditActualStart').value = '';
+  document.getElementById('inputEditActualEnd').value = '';
+  const latestEnd = getLatestPlanEnd();
+  const start = latestEnd ? new Date(latestEnd) : roundTo10Min(new Date());
+  const later = new Date(start.getTime() + 60*60*1000);
+  document.getElementById('inputPlanStart').value = fmtDateTimeLocal(start);
   document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(later);
   taskOverlay.classList.add('show');
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
+
+/* 予定開始を選択したら、予定終了を自動で1時間後にセット */
+document.getElementById('inputPlanStart').addEventListener('input', () => {
+  const startVal = document.getElementById('inputPlanStart').value;
+  if (!startVal) return;
+  const start = new Date(startVal);
+  const end = new Date(start.getTime() + 60*60*1000);
+  document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(end);
+});
+
+/* 実績開始（編集欄）を選択したら、実績終了を自動で1時間後にセット */
+document.getElementById('inputEditActualStart').addEventListener('input', () => {
+  const startVal = document.getElementById('inputEditActualStart').value;
+  if (!startVal) return;
+  const start = new Date(startVal);
+  const end = new Date(start.getTime() + 60*60*1000);
+  document.getElementById('inputEditActualEnd').value = fmtDateTimeLocal(end);
+});
 
 document.querySelectorAll('#rankSelect label').forEach(label => {
   label.addEventListener('click', () => {
@@ -556,6 +604,8 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const rank = category === 'private' ? 'P' : rankInput.value;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
+  const wasDone = existing.done || false;
+
   const data = Object.assign({}, existing, {
     name, rank, category,
     planStart: planStart ? new Date(planStart).toISOString() : null,
@@ -566,19 +616,45 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     actualEnd: existing.actualEnd || null,
     createdAt: existing.createdAt || new Date().toISOString()
   });
+
+  // 編集時のみ：実績欄の内容を反映
+  if (currentEditId) {
+    const actualStartVal = document.getElementById('inputEditActualStart').value;
+    const actualEndVal = document.getElementById('inputEditActualEnd').value;
+    if (actualStartVal && actualEndVal) {
+      data.actualStart = new Date(actualStartVal).toISOString();
+      data.actualEnd = new Date(actualEndVal).toISOString();
+      data.done = true;
+    } else {
+      data.actualStart = null;
+      data.actualEnd = null;
+      data.done = false;
+    }
+  }
+
   saveTask(id, data);
   taskOverlay.classList.remove('show');
+  if (!wasDone && data.done) onTaskCompleted(existing, data);
 });
 
 /* ---------- 実績入力モーダル ---------- */
 const actualOverlay = document.getElementById('actualOverlay');
 document.getElementById('cancelActualBtn').addEventListener('click', () => actualOverlay.classList.remove('show'));
 
+/* 実績開始を選択したら、実績終了を自動で1時間後にセット */
+document.getElementById('inputActualStart').addEventListener('input', () => {
+  const startVal = document.getElementById('inputActualStart').value;
+  if (!startVal) return;
+  const start = new Date(startVal);
+  const end = new Date(start.getTime() + 60*60*1000);
+  document.getElementById('inputActualEnd').value = fmtDateTimeLocal(end);
+});
+
 function openActualModal(id){
   currentActualId = id;
   const t = tasks[id];
   document.getElementById('actualTaskName').textContent = t.name;
-  const now = new Date();
+  const now = roundTo10Min(new Date());
   document.getElementById('inputActualStart').value = t.actualStart ? fmtDateTimeLocal(new Date(t.actualStart)) : (t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : fmtDateTimeLocal(now));
   document.getElementById('inputActualEnd').value = fmtDateTimeLocal(now);
   actualOverlay.classList.add('show');
@@ -704,15 +780,16 @@ function renderList(){
         <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
       </div>
       <div class="task-actions">
-        ${!t.done ? `<button class="icon-btn done-btn" title="実績記録">✓</button>` : `<button class="icon-btn" title="編集">✎</button>`}
+        ${!t.done ? `<button class="icon-btn done-btn" title="実績記録">✓</button>` : ``}
+        <button class="icon-btn edit-btn" title="編集">✎</button>
         <button class="icon-btn del-btn" title="削除">🗑</button>
       </div>
     `;
-    const [doneBtn, delBtn] = row.querySelectorAll('.task-actions button');
-    doneBtn.addEventListener('click', () => {
-      if (!t.done) openActualModal(id);
-      else { currentEditId = id; openEditModal(t); }
-    });
+    const doneBtn = row.querySelector('.done-btn');
+    const editBtn = row.querySelector('.edit-btn');
+    const delBtn = row.querySelector('.del-btn');
+    if (doneBtn) doneBtn.addEventListener('click', () => openActualModal(id));
+    editBtn.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
     delBtn.addEventListener('click', () => deleteTask(id));
     list.appendChild(row);
   });
@@ -757,6 +834,9 @@ function openEditModal(t){
   });
   document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
   document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
+  document.getElementById('actualEditField').style.display = 'block';
+  document.getElementById('inputEditActualStart').value = t.actualStart ? fmtDateTimeLocal(new Date(t.actualStart)) : '';
+  document.getElementById('inputEditActualEnd').value = t.actualEnd ? fmtDateTimeLocal(new Date(t.actualEnd)) : '';
   taskOverlay.classList.add('show');
 }
 
