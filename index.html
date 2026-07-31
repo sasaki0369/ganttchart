@@ -386,6 +386,16 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="datetime-local" id="inputPlanEnd" step="600">
       </div>
     </div>
+    <div class="row2" id="repeatTimeRow" style="display:none;">
+      <div class="field">
+        <label>開始時刻</label>
+        <input type="time" id="inputRepeatStartTime" step="600">
+      </div>
+      <div class="field">
+        <label>終了時刻</label>
+        <input type="time" id="inputRepeatEndTime" step="600">
+      </div>
+    </div>
     <div class="field" id="dueDateRow" style="display:none;">
       <label>期日</label>
       <input type="date" id="inputDueDate">
@@ -514,7 +524,11 @@ function saveStats(){
 
 /* ---------- ユーティリティ ---------- */
 function uid(){ return 't' + Date.now() + Math.floor(Math.random()*1000); }
-function todayStr(){ const d = new Date(); return d.toISOString().slice(0,10); }
+function todayStr(){ return toLocalDateStr(new Date()); }
+function toLocalDateStr(d){
+  const pad = n => n.toString().padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
 function fmtTime(iso){
   if(!iso) return '--:--';
   const d = new Date(iso);
@@ -575,14 +589,16 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.getElementById('inputName').value = '';
   document.getElementById('inputMemo').value = '';
   document.getElementById('inputDueDate').value = '';
+  document.getElementById('inputRepeatStartTime').value = '';
+  document.getElementById('inputRepeatEndTime').value = '';
   document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
-  setDateMode('time');
   document.getElementById('inputRepeatEnabled').checked = false;
   document.getElementById('repeatWeekdayRow').style.display = 'none';
   document.querySelectorAll('#weekdaySelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
+  setDateMode('time');
   const latestEnd = getLatestPlanEnd();
   const start = latestEnd ? new Date(latestEnd) : roundTo10Min(new Date());
   const later = new Date(start.getTime() + 60*60*1000);
@@ -592,15 +608,26 @@ document.getElementById('fabAdd').addEventListener('click', () => {
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
 
-/* 日時設定（日時指定／期日のみ／未定）の切り替え */
+/* 日時設定（日時指定／期日のみ／未定）と繰り返しの組み合わせによる表示切り替え */
+function updateDateFieldsVisibility(){
+  const dateModeInput = document.querySelector('#dateModeSelect input:checked');
+  const mode = dateModeInput ? dateModeInput.value : 'time';
+  const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
+  const showFullDateTime = (mode === 'time' && !repeatEnabled);
+  const showRepeatTime = (mode === 'time' && repeatEnabled);
+  const showDueDate = (mode === 'date');
+  document.getElementById('planDateRow').style.display = showFullDateTime ? 'flex' : 'none';
+  document.getElementById('repeatTimeRow').style.display = showRepeatTime ? 'flex' : 'none';
+  document.getElementById('dueDateRow').style.display = showDueDate ? 'block' : 'none';
+}
+
 function setDateMode(mode){
   document.querySelectorAll('#dateModeSelect label').forEach(l => {
     const active = l.dataset.mode === mode;
     l.classList.toggle('active', active);
     l.querySelector('input').checked = active;
   });
-  document.getElementById('planDateRow').style.display = (mode === 'time') ? 'flex' : 'none';
-  document.getElementById('dueDateRow').style.display = (mode === 'date') ? 'block' : 'none';
+  updateDateFieldsVisibility();
 }
 document.querySelectorAll('#dateModeSelect label').forEach(label => {
   label.addEventListener('click', () => setDateMode(label.dataset.mode));
@@ -609,6 +636,7 @@ document.querySelectorAll('#dateModeSelect label').forEach(label => {
 /* 繰り返し（毎週）トグル */
 document.getElementById('inputRepeatEnabled').addEventListener('change', (e) => {
   document.getElementById('repeatWeekdayRow').style.display = e.target.checked ? 'block' : 'none';
+  updateDateFieldsVisibility();
 });
 
 /* 曜日を取得するヘルパー：指定曜日の直近の日付（今日を含む）を返す */
@@ -617,7 +645,7 @@ function getNextWeekdayDate(weekday, fromDate){
   d.setHours(0,0,0,0);
   const diff = (weekday - d.getDay() + 7) % 7;
   d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0,10);
+  return toLocalDateStr(d);
 }
 
 document.querySelectorAll('#weekdaySelect label').forEach(label => {
@@ -643,6 +671,17 @@ document.getElementById('inputPlanStart').addEventListener('input', () => {
   const start = new Date(startVal);
   const end = new Date(start.getTime() + 60*60*1000);
   document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(end);
+});
+
+/* 繰り返し用の開始時刻を入力したら、終了時刻を自動で1時間後にセット */
+document.getElementById('inputRepeatStartTime').addEventListener('input', () => {
+  const startVal = document.getElementById('inputRepeatStartTime').value;
+  if (!startVal) return;
+  const [h, m] = startVal.split(':').map(Number);
+  const d = new Date(); d.setHours(h, m, 0, 0);
+  d.setHours(d.getHours() + 1);
+  const pad = n => n.toString().padStart(2,'0');
+  document.getElementById('inputRepeatEndTime').value = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 });
 
 document.querySelectorAll('#rankSelect label').forEach(label => {
@@ -676,30 +715,55 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const planStart = document.getElementById('inputPlanStart').value;
   const planEnd = document.getElementById('inputPlanEnd').value;
   const dueDate = document.getElementById('inputDueDate').value;
+  const repeatStartTime = document.getElementById('inputRepeatStartTime').value;
+  const repeatEndTime = document.getElementById('inputRepeatEndTime').value;
   const memo = document.getElementById('inputMemo').value.trim();
   const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
   const weekdayInput = document.querySelector('#weekdaySelect input:checked');
+  const isRepeatTimeMode = (dateMode === 'time' && repeatEnabled);
+
   if (!name){ alert('タスク名を入力してください'); return; }
   if (category === 'work' && !rankInput){ alert('優先順位を選択してください'); return; }
   if (dateMode === 'date' && !dueDate){ alert('期日を選択してください'); return; }
   if (repeatEnabled && !weekdayInput){ alert('繰り返しの曜日を選択してください'); return; }
+  if (isRepeatTimeMode && !repeatStartTime){ alert('開始時刻を入力してください'); return; }
+
   const rank = category === 'private' ? 'P' : rankInput.value;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
+  const weekday = repeatEnabled ? parseInt(weekdayInput.value, 10) : null;
 
   const data = Object.assign({}, existing, {
     name, rank, category,
-    planStart: (dateMode === 'time' && planStart) ? new Date(planStart).toISOString() : null,
-    planEnd: (dateMode === 'time' && planEnd) ? new Date(planEnd).toISOString() : null,
-    planDateOnly: (dateMode === 'date' && dueDate) ? dueDate : null,
     memo,
     repeatEnabled,
-    repeatWeekday: repeatEnabled ? parseInt(weekdayInput.value, 10) : null,
+    repeatWeekday: weekday,
+    repeatStartTime: isRepeatTimeMode ? repeatStartTime : null,
+    repeatEndTime: isRepeatTimeMode ? (repeatEndTime || repeatStartTime) : null,
     done: existing.done || false,
     actualStart: existing.actualStart || null,
     actualEnd: existing.actualEnd || null,
     createdAt: existing.createdAt || new Date().toISOString()
   });
+
+  if (isRepeatTimeMode) {
+    // 繰り返し×時刻指定：日付は選択した曜日から自動算出し、時刻のみ入力を反映
+    let occurrenceDateStr;
+    if (existing.planStart) {
+      const existingDateStr = toLocalDateStr(new Date(existing.planStart));
+      const existingWeekday = new Date(existingDateStr + 'T00:00:00').getDay();
+      occurrenceDateStr = (existingWeekday === weekday) ? existingDateStr : getNextWeekdayDate(weekday);
+    } else {
+      occurrenceDateStr = getNextWeekdayDate(weekday);
+    }
+    data.planStart = new Date(`${occurrenceDateStr}T${repeatStartTime}`).toISOString();
+    data.planEnd = new Date(`${occurrenceDateStr}T${data.repeatEndTime}`).toISOString();
+    data.planDateOnly = null;
+  } else {
+    data.planStart = (dateMode === 'time' && planStart) ? new Date(planStart).toISOString() : null;
+    data.planEnd = (dateMode === 'time' && planEnd) ? new Date(planEnd).toISOString() : null;
+    data.planDateOnly = (dateMode === 'date' && dueDate) ? dueDate : null;
+  }
 
   saveTask(id, data);
   taskOverlay.classList.remove('show');
@@ -766,26 +830,35 @@ function deleteTask(id){
 
 /* ---------- 繰り返しスケジュール：完了時に翌週分を自動登録 ---------- */
 function createNextRecurrence(completedTask){
-  const baseDateStr = completedTask.planDateOnly || (completedTask.planStart ? completedTask.planStart.slice(0,10) : todayStr());
+  const hasTimeRepeat = !!(completedTask.repeatStartTime && completedTask.repeatEndTime);
+  const baseDateStr = completedTask.planDateOnly || (completedTask.planStart ? toLocalDateStr(new Date(completedTask.planStart)) : todayStr());
   const base = new Date(baseDateStr + 'T00:00:00');
   const next = new Date(base.getTime() + 7*24*60*60*1000);
-  const nextDateStr = next.toISOString().slice(0,10);
+  const nextDateStr = toLocalDateStr(next);
   const newId = uid();
   const newTask = {
     name: completedTask.name,
     rank: completedTask.rank,
     category: completedTask.category,
     memo: completedTask.memo || '',
-    planStart: null,
-    planEnd: null,
-    planDateOnly: nextDateStr,
     repeatEnabled: true,
     repeatWeekday: completedTask.repeatWeekday,
+    repeatStartTime: completedTask.repeatStartTime || null,
+    repeatEndTime: completedTask.repeatEndTime || null,
     done: false,
     actualStart: null,
     actualEnd: null,
     createdAt: new Date().toISOString()
   };
+  if (hasTimeRepeat){
+    newTask.planStart = new Date(`${nextDateStr}T${completedTask.repeatStartTime}`).toISOString();
+    newTask.planEnd = new Date(`${nextDateStr}T${completedTask.repeatEndTime}`).toISOString();
+    newTask.planDateOnly = null;
+  } else {
+    newTask.planStart = null;
+    newTask.planEnd = null;
+    newTask.planDateOnly = nextDateStr;
+  }
   saveTask(newId, newTask);
 }
 
@@ -809,7 +882,7 @@ function onTaskCompleted(before, after){
   const today = todayStr();
   if (stats.lastDoneDate !== today) {
     const yest = new Date(); yest.setDate(yest.getDate()-1);
-    const yestStr = yest.toISOString().slice(0,10);
+    const yestStr = toLocalDateStr(yest);
     stats.streak = (stats.lastDoneDate === yestStr) ? (stats.streak || 0) + 1 : 1;
     stats.lastDoneDate = today;
     stats.bestStreak = Math.max(stats.bestStreak || 0, stats.streak);
@@ -966,11 +1039,7 @@ function openEditModal(t){
     l.classList.toggle('active', active);
     l.querySelector('input').checked = active;
   });
-  const mode = t.planStart ? 'time' : (t.planDateOnly ? 'date' : 'undecided');
-  setDateMode(mode);
-  document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
-  document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
-  document.getElementById('inputDueDate').value = t.planDateOnly || '';
+
   const repeatEnabled = !!t.repeatEnabled;
   document.getElementById('inputRepeatEnabled').checked = repeatEnabled;
   document.getElementById('repeatWeekdayRow').style.display = repeatEnabled ? 'block' : 'none';
@@ -979,6 +1048,14 @@ function openEditModal(t){
     l.classList.toggle('active', active);
     l.querySelector('input').checked = active;
   });
+  document.getElementById('inputRepeatStartTime').value = t.repeatStartTime || '';
+  document.getElementById('inputRepeatEndTime').value = t.repeatEndTime || '';
+
+  const mode = t.planStart ? 'time' : (t.planDateOnly ? 'date' : 'undecided');
+  setDateMode(mode);
+  document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
+  document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
+  document.getElementById('inputDueDate').value = t.planDateOnly || '';
   taskOverlay.classList.add('show');
 }
 
@@ -1004,7 +1081,7 @@ function renderGantt(){
   body.innerHTML = '';
 
   const dayTasks = Object.entries(tasks).filter(([id, t]) => {
-    const d = t.planStart ? t.planStart.slice(0,10) : (t.planDateOnly ? t.planDateOnly : (t.actualStart ? t.actualStart.slice(0,10) : null));
+    const d = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly ? t.planDateOnly : (t.actualStart ? toLocalDateStr(new Date(t.actualStart)) : null));
     return d === targetDate;
   }).sort((a,b) => (a[1].planStart||'').localeCompare(b[1].planStart||''));
 
