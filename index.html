@@ -196,6 +196,10 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
   width:100%; padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); font-size:14px; font-family:inherit; background:#FFFBF7;
 }
 .rank-select{ display:flex; gap:8px; }
+.weekday-select{ display:flex; gap:5px; flex-wrap:nowrap; }
+.weekday-select label{ flex:1; text-align:center; padding:9px 0; border-radius:9px; border:1.5px solid var(--line); font-weight:800; cursor:pointer; font-size:13px; margin:0; color: var(--ink-soft); }
+.weekday-select input{ display:none; }
+.weekday-select label.active{ background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .rank-select label{ flex:1; text-align:center; padding:10px 0; border-radius:10px; border:1.5px solid var(--line); font-weight:800; cursor:pointer; font-size:14px; margin:0; color: var(--ink-soft);}
 .rank-select input{ display:none; }
 .rank-select input:checked + span{ }
@@ -387,6 +391,24 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
       <input type="date" id="inputDueDate">
     </div>
     <div class="field">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="inputRepeatEnabled" style="width:auto;">
+        🔁 繰り返し（毎週）
+      </label>
+    </div>
+    <div class="field" id="repeatWeekdayRow" style="display:none;">
+      <label>曜日を選択（完了すると翌週の同じ曜日で自動的に再登録されます）</label>
+      <div class="weekday-select" id="weekdaySelect">
+        <label data-day="0"><input type="radio" name="weekday" value="0"><span class="opt">日</span></label>
+        <label data-day="1"><input type="radio" name="weekday" value="1"><span class="opt">月</span></label>
+        <label data-day="2"><input type="radio" name="weekday" value="2"><span class="opt">火</span></label>
+        <label data-day="3"><input type="radio" name="weekday" value="3"><span class="opt">水</span></label>
+        <label data-day="4"><input type="radio" name="weekday" value="4"><span class="opt">木</span></label>
+        <label data-day="5"><input type="radio" name="weekday" value="5"><span class="opt">金</span></label>
+        <label data-day="6"><input type="radio" name="weekday" value="6"><span class="opt">土</span></label>
+      </div>
+    </div>
+    <div class="field">
       <label>メモ（任意・URLはタップで開けます）</label>
       <textarea id="inputMemo" rows="2" placeholder="補足事項があれば"></textarea>
     </div>
@@ -557,6 +579,10 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
   setDateMode('time');
+  document.getElementById('inputRepeatEnabled').checked = false;
+  document.getElementById('repeatWeekdayRow').style.display = 'none';
+  document.querySelectorAll('#weekdaySelect input').forEach(r => r.checked = false);
+  document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
   const latestEnd = getLatestPlanEnd();
   const start = latestEnd ? new Date(latestEnd) : roundTo10Min(new Date());
   const later = new Date(start.getTime() + 60*60*1000);
@@ -578,6 +604,36 @@ function setDateMode(mode){
 }
 document.querySelectorAll('#dateModeSelect label').forEach(label => {
   label.addEventListener('click', () => setDateMode(label.dataset.mode));
+});
+
+/* 繰り返し（毎週）トグル */
+document.getElementById('inputRepeatEnabled').addEventListener('change', (e) => {
+  document.getElementById('repeatWeekdayRow').style.display = e.target.checked ? 'block' : 'none';
+});
+
+/* 曜日を取得するヘルパー：指定曜日の直近の日付（今日を含む）を返す */
+function getNextWeekdayDate(weekday, fromDate){
+  const d = new Date(fromDate || new Date());
+  d.setHours(0,0,0,0);
+  const diff = (weekday - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0,10);
+}
+
+document.querySelectorAll('#weekdaySelect label').forEach(label => {
+  label.addEventListener('click', () => {
+    document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
+    label.classList.add('active');
+    label.querySelector('input').checked = true;
+    // 期日のみモードで、期日が未入力の場合は直近の該当曜日を自動セット
+    const dateModeInput = document.querySelector('#dateModeSelect input:checked');
+    if (dateModeInput && dateModeInput.value === 'date') {
+      const dueDateInput = document.getElementById('inputDueDate');
+      if (!dueDateInput.value) {
+        dueDateInput.value = getNextWeekdayDate(parseInt(label.dataset.day, 10));
+      }
+    }
+  });
 });
 
 /* 予定開始を選択したら、予定終了を自動で1時間後にセット */
@@ -621,9 +677,12 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const planEnd = document.getElementById('inputPlanEnd').value;
   const dueDate = document.getElementById('inputDueDate').value;
   const memo = document.getElementById('inputMemo').value.trim();
+  const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
+  const weekdayInput = document.querySelector('#weekdaySelect input:checked');
   if (!name){ alert('タスク名を入力してください'); return; }
   if (category === 'work' && !rankInput){ alert('優先順位を選択してください'); return; }
   if (dateMode === 'date' && !dueDate){ alert('期日を選択してください'); return; }
+  if (repeatEnabled && !weekdayInput){ alert('繰り返しの曜日を選択してください'); return; }
   const rank = category === 'private' ? 'P' : rankInput.value;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
@@ -634,6 +693,8 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     planEnd: (dateMode === 'time' && planEnd) ? new Date(planEnd).toISOString() : null,
     planDateOnly: (dateMode === 'date' && dueDate) ? dueDate : null,
     memo,
+    repeatEnabled,
+    repeatWeekday: repeatEnabled ? parseInt(weekdayInput.value, 10) : null,
     done: existing.done || false,
     actualStart: existing.actualStart || null,
     actualEnd: existing.actualEnd || null,
@@ -692,12 +753,40 @@ document.getElementById('saveActualBtn').addEventListener('click', () => {
   });
   saveTask(id, data);
   actualOverlay.classList.remove('show');
-  if (!wasDone) onTaskCompleted(t, data);
+  if (!wasDone) {
+    onTaskCompleted(t, data);
+    if (data.repeatEnabled) createNextRecurrence(data);
+  }
 });
 
 /* ---------- タスク削除 ---------- */
 function deleteTask(id){
   if (confirm('このタスクを削除しますか？')) tasksRef.child(id).remove();
+}
+
+/* ---------- 繰り返しスケジュール：完了時に翌週分を自動登録 ---------- */
+function createNextRecurrence(completedTask){
+  const baseDateStr = completedTask.planDateOnly || (completedTask.planStart ? completedTask.planStart.slice(0,10) : todayStr());
+  const base = new Date(baseDateStr + 'T00:00:00');
+  const next = new Date(base.getTime() + 7*24*60*60*1000);
+  const nextDateStr = next.toISOString().slice(0,10);
+  const newId = uid();
+  const newTask = {
+    name: completedTask.name,
+    rank: completedTask.rank,
+    category: completedTask.category,
+    memo: completedTask.memo || '',
+    planStart: null,
+    planEnd: null,
+    planDateOnly: nextDateStr,
+    repeatEnabled: true,
+    repeatWeekday: completedTask.repeatWeekday,
+    done: false,
+    actualStart: null,
+    actualEnd: null,
+    createdAt: new Date().toISOString()
+  };
+  saveTask(newId, newTask);
 }
 
 /* ---------- ゲーミフィケーション ---------- */
@@ -809,7 +898,7 @@ function renderList(){
     row.innerHTML = `
       <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : t.rank}</div>
       <div class="task-main">
-        <div class="task-name ${t.done?'done':''}">${escapeHtml(t.name)}</div>
+        <div class="task-name ${t.done?'done':''}">${t.repeatEnabled ? '🔁 ' : ''}${escapeHtml(t.name)}</div>
         <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
         ${memoHtml}
       </div>
@@ -882,6 +971,14 @@ function openEditModal(t){
   document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
   document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
   document.getElementById('inputDueDate').value = t.planDateOnly || '';
+  const repeatEnabled = !!t.repeatEnabled;
+  document.getElementById('inputRepeatEnabled').checked = repeatEnabled;
+  document.getElementById('repeatWeekdayRow').style.display = repeatEnabled ? 'block' : 'none';
+  document.querySelectorAll('#weekdaySelect label').forEach(l => {
+    const active = repeatEnabled && parseInt(l.dataset.day, 10) === t.repeatWeekday;
+    l.classList.toggle('active', active);
+    l.querySelector('input').checked = active;
+  });
   taskOverlay.classList.add('show');
 }
 
