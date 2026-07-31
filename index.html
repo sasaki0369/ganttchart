@@ -153,6 +153,8 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
   display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line);
 }
 .task-row:last-child{ border-bottom:none; }
+.task-row.row-undated{ background: #F5F1FC; border-radius:10px; margin-bottom:2px; }
+.task-row.row-overdue{ background: #FFF0EE; border-radius:10px; margin-bottom:2px; }
 .rank-badge{
   width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
   font-weight:800; font-size:14px;
@@ -161,6 +163,8 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .task-name{ font-weight:700; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .task-name.done{ text-decoration: line-through; color: var(--ink-soft); }
 .task-meta{ font-size:11.5px; color: var(--ink-soft); margin-top:2px; }
+.task-memo{ font-size:11.5px; color: var(--ink-soft); margin-top:2px; word-break:break-all; }
+.task-memo a{ color: var(--accent); text-decoration:underline; }
 .task-actions{ display:flex; gap:6px; flex-shrink:0; }
 .icon-btn{
   border:none; background: var(--accent-soft); color:var(--accent); width:32px; height:32px; border-radius:9px;
@@ -357,7 +361,13 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <label class="rD" data-rank="D"><input type="radio" name="rank" value="D"><span class="opt">D</span></label>
       </div>
     </div>
-    <div class="row2">
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <label style="margin:0; display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; color:var(--ink-soft);">
+        <input type="checkbox" id="inputDateUndecided" style="width:auto;">
+        日時未定
+      </label>
+    </div>
+    <div class="row2" id="planDateRow">
       <div class="field">
         <label>予定開始</label>
         <input type="datetime-local" id="inputPlanStart" step="600">
@@ -367,18 +377,8 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="datetime-local" id="inputPlanEnd" step="600">
       </div>
     </div>
-    <div class="row2" id="actualEditField" style="display:none;">
-      <div class="field">
-        <label>実績開始</label>
-        <input type="datetime-local" id="inputEditActualStart" step="600">
-      </div>
-      <div class="field">
-        <label>実績終了</label>
-        <input type="datetime-local" id="inputEditActualEnd" step="600">
-      </div>
-    </div>
     <div class="field">
-      <label>メモ（任意）</label>
+      <label>メモ（任意・URLはタップで開けます）</label>
       <textarea id="inputMemo" rows="2" placeholder="補足事項があれば"></textarea>
     </div>
     <div class="modal-actions">
@@ -393,6 +393,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
   <div class="modal">
     <h2>実績を記録</h2>
     <div class="field" style="font-weight:700;" id="actualTaskName"></div>
+    <button class="btn secondary" id="planCompleteBtn" style="width:100%; margin-bottom:12px;">📌 予定通り完了</button>
     <div class="row2">
       <div class="field">
         <label>実績開始</label>
@@ -540,9 +541,8 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
-  document.getElementById('actualEditField').style.display = 'none';
-  document.getElementById('inputEditActualStart').value = '';
-  document.getElementById('inputEditActualEnd').value = '';
+  document.getElementById('inputDateUndecided').checked = false;
+  document.getElementById('planDateRow').style.display = 'flex';
   const latestEnd = getLatestPlanEnd();
   const start = latestEnd ? new Date(latestEnd) : roundTo10Min(new Date());
   const later = new Date(start.getTime() + 60*60*1000);
@@ -552,6 +552,11 @@ document.getElementById('fabAdd').addEventListener('click', () => {
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
 
+/* 日時未定チェック時は予定日時欄を隠す */
+document.getElementById('inputDateUndecided').addEventListener('change', (e) => {
+  document.getElementById('planDateRow').style.display = e.target.checked ? 'none' : 'flex';
+});
+
 /* 予定開始を選択したら、予定終了を自動で1時間後にセット */
 document.getElementById('inputPlanStart').addEventListener('input', () => {
   const startVal = document.getElementById('inputPlanStart').value;
@@ -559,15 +564,6 @@ document.getElementById('inputPlanStart').addEventListener('input', () => {
   const start = new Date(startVal);
   const end = new Date(start.getTime() + 60*60*1000);
   document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(end);
-});
-
-/* 実績開始（編集欄）を選択したら、実績終了を自動で1時間後にセット */
-document.getElementById('inputEditActualStart').addEventListener('input', () => {
-  const startVal = document.getElementById('inputEditActualStart').value;
-  if (!startVal) return;
-  const start = new Date(startVal);
-  const end = new Date(start.getTime() + 60*60*1000);
-  document.getElementById('inputEditActualEnd').value = fmtDateTimeLocal(end);
 });
 
 document.querySelectorAll('#rankSelect label').forEach(label => {
@@ -596,6 +592,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const categoryInput = document.querySelector('#categorySelect input:checked');
   const category = categoryInput ? categoryInput.value : 'work';
   const rankInput = document.querySelector('#rankSelect input:checked');
+  const dateUndecided = document.getElementById('inputDateUndecided').checked;
   const planStart = document.getElementById('inputPlanStart').value;
   const planEnd = document.getElementById('inputPlanEnd').value;
   const memo = document.getElementById('inputMemo').value.trim();
@@ -604,12 +601,11 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const rank = category === 'private' ? 'P' : rankInput.value;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
-  const wasDone = existing.done || false;
 
   const data = Object.assign({}, existing, {
     name, rank, category,
-    planStart: planStart ? new Date(planStart).toISOString() : null,
-    planEnd: planEnd ? new Date(planEnd).toISOString() : null,
+    planStart: (!dateUndecided && planStart) ? new Date(planStart).toISOString() : null,
+    planEnd: (!dateUndecided && planEnd) ? new Date(planEnd).toISOString() : null,
     memo,
     done: existing.done || false,
     actualStart: existing.actualStart || null,
@@ -617,29 +613,24 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     createdAt: existing.createdAt || new Date().toISOString()
   });
 
-  // 編集時のみ：実績欄の内容を反映
-  if (currentEditId) {
-    const actualStartVal = document.getElementById('inputEditActualStart').value;
-    const actualEndVal = document.getElementById('inputEditActualEnd').value;
-    if (actualStartVal && actualEndVal) {
-      data.actualStart = new Date(actualStartVal).toISOString();
-      data.actualEnd = new Date(actualEndVal).toISOString();
-      data.done = true;
-    } else {
-      data.actualStart = null;
-      data.actualEnd = null;
-      data.done = false;
-    }
-  }
-
   saveTask(id, data);
   taskOverlay.classList.remove('show');
-  if (!wasDone && data.done) onTaskCompleted(existing, data);
 });
 
 /* ---------- 実績入力モーダル ---------- */
 const actualOverlay = document.getElementById('actualOverlay');
 document.getElementById('cancelActualBtn').addEventListener('click', () => actualOverlay.classList.remove('show'));
+
+/* 予定通り完了：予定時間をそのまま実績時間欄にコピー */
+document.getElementById('planCompleteBtn').addEventListener('click', () => {
+  const t = tasks[currentActualId];
+  if (!t || !t.planStart || !t.planEnd){
+    alert('予定時間が設定されていないため、コピーできません');
+    return;
+  }
+  document.getElementById('inputActualStart').value = fmtDateTimeLocal(new Date(t.planStart));
+  document.getElementById('inputActualEnd').value = fmtDateTimeLocal(new Date(t.planEnd));
+});
 
 /* 実績開始を選択したら、実績終了を自動で1時間後にセット */
 document.getElementById('inputActualStart').addEventListener('input', () => {
@@ -755,11 +746,16 @@ function renderList(){
   const emptyHint = document.getElementById('emptyHint');
   list.innerHTML = '';
 
+  const now = new Date();
+
   const todayTasks = Object.entries(tasks).filter(([id,t]) => {
     if (currentFilter !== 'ALL' && t.rank !== currentFilter) return false;
     return true;
   }).sort((a,b) => {
-    // 未完了優先、その後ランク順、その後予定開始順
+    // 日時未定を最優先、その後未完了優先、その後ランク順、その後予定開始順
+    const aUndated = !a[1].planStart;
+    const bUndated = !b[1].planStart;
+    if (aUndated !== bUndated) return aUndated ? -1 : 1;
     if (a[1].done !== b[1].done) return a[1].done ? 1 : -1;
     const rOrder = { A:0, B:1, C:2, D:3, P:4 };
     if (rOrder[a[1].rank] !== rOrder[b[1].rank]) return rOrder[a[1].rank] - rOrder[b[1].rank];
@@ -770,17 +766,21 @@ function renderList(){
 
   todayTasks.forEach(([id, t]) => {
     const row = document.createElement('div');
-    row.className = 'task-row';
-    const planTxt = t.planStart ? `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}` : '未設定';
+    const isOverdue = !t.done && t.planEnd && new Date(t.planEnd) < now;
+    const isUndated = !t.planStart;
+    row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '');
+    const planTxt = t.planStart ? `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}` : '日時未定';
     const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}` : '';
+    const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
     row.innerHTML = `
       <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : t.rank}</div>
       <div class="task-main">
         <div class="task-name ${t.done?'done':''}">${escapeHtml(t.name)}</div>
         <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
+        ${memoHtml}
       </div>
       <div class="task-actions">
-        ${!t.done ? `<button class="icon-btn done-btn" title="実績記録">✓</button>` : ``}
+        <button class="icon-btn done-btn" title="${t.done ? '実績編集' : '実績記録'}">${t.done ? '📝' : '✓'}</button>
         <button class="icon-btn edit-btn" title="編集">✎</button>
         <button class="icon-btn del-btn" title="削除">🗑</button>
       </div>
@@ -788,7 +788,7 @@ function renderList(){
     const doneBtn = row.querySelector('.done-btn');
     const editBtn = row.querySelector('.edit-btn');
     const delBtn = row.querySelector('.del-btn');
-    if (doneBtn) doneBtn.addEventListener('click', () => openActualModal(id));
+    doneBtn.addEventListener('click', () => openActualModal(id));
     editBtn.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
     delBtn.addEventListener('click', () => deleteTask(id));
     list.appendChild(row);
@@ -821,6 +821,19 @@ function escapeHtml(str){
   return div.innerHTML;
 }
 
+/* メモ内のURLをタップ可能なリンクに変換 */
+function linkifyMemo(memo){
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = memo.split(urlRegex);
+  return parts.map(part => {
+    if (/^https?:\/\//.test(part)) {
+      const safeUrl = escapeHtml(part);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${safeUrl}</a>`;
+    }
+    return escapeHtml(part);
+  }).join('');
+}
+
 /* ---------- 編集モーダル（完了済みタスクの修正用） ---------- */
 function openEditModal(t){
   document.getElementById('modalTitle').textContent = 'やることを編集';
@@ -832,11 +845,11 @@ function openEditModal(t){
     l.classList.toggle('active', active);
     l.querySelector('input').checked = active;
   });
+  const isUndecided = !t.planStart;
+  document.getElementById('inputDateUndecided').checked = isUndecided;
+  document.getElementById('planDateRow').style.display = isUndecided ? 'none' : 'flex';
   document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
   document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
-  document.getElementById('actualEditField').style.display = 'block';
-  document.getElementById('inputEditActualStart').value = t.actualStart ? fmtDateTimeLocal(new Date(t.actualStart)) : '';
-  document.getElementById('inputEditActualEnd').value = t.actualEnd ? fmtDateTimeLocal(new Date(t.actualEnd)) : '';
   taskOverlay.classList.add('show');
 }
 
