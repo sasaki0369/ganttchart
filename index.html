@@ -1172,8 +1172,13 @@ function renderList(){
     });
   });
 
-  // 今日の達成率（備忘・プライベートは実績集計の対象外。ガントチャートには表示されます。表示/非表示トグルの影響は受けません）
-  const achievementTasks = Object.values(tasks).filter(t => isAchievementRank(t.rank));
+  // 今日の達成率（分母は「期日が今日」のA〜Cランクのみ。日時未定・備忘・プライベートは対象外。ガントチャートには表示されます。表示/非表示トグルの影響は受けません）
+  const todayKey = todayStr();
+  const achievementTasks = Object.values(tasks).filter(t => {
+    if (!isAchievementRank(t.rank)) return false;
+    const dateKey = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly || null);
+    return dateKey === todayKey;
+  });
   const total = achievementTasks.length;
   const done = achievementTasks.filter(t => t.done).length;
   const pct = total ? Math.round(done/total*100) : 0;
