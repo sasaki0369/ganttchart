@@ -579,6 +579,8 @@ function getDefaultStartTime(){
 /* ---------- 開始15分前通知 ---------- */
 let scheduledNotifyTimers = {};
 const notifyBtn = document.getElementById('notifyBtn');
+function isIOSDevice(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
+function isAndroidDevice(){ return /Android/.test(navigator.userAgent); }
 
 function updateNotifyBtnLabel(){
   if (!('Notification' in window)) {
@@ -600,7 +602,11 @@ function updateNotifyBtnLabel(){
 
 notifyBtn.addEventListener('click', () => {
   if (!('Notification' in window)) {
-    alert('この端末・ブラウザは通知に対応していません。\n\niPhoneの場合：Safariで開いた画面右下の共有ボタン→「ホーム画面に追加」でアプリを追加し、ホーム画面のアイコンから開いた状態で再度お試しください（iOS 16.4以降が必要です）。');
+    if (isIOSDevice()) {
+      alert('この端末では通知が利用できません。\n\niPhoneの場合：Safariで開いた画面右下の共有ボタン→「ホーム画面に追加」でアプリを追加し、ホーム画面のアイコンから開いた状態で再度お試しください（iOS 16.4以降が必要です）。');
+    } else {
+      alert('この端末・ブラウザは通知に対応していません。');
+    }
     return;
   }
   if (Notification.permission === 'default') {
@@ -608,17 +614,28 @@ notifyBtn.addEventListener('click', () => {
       updateNotifyBtnLabel();
       scheduleNotifications();
       if (result !== 'granted') {
-        alert('通知が許可されませんでした。\niPhoneの場合は、ホーム画面に追加したアイコンから開いているかご確認ください。');
+        alert(deniedGuideMessage());
       }
     }).catch(() => {
-      alert('通知の許可リクエストに失敗しました。\niPhoneの場合は、ホーム画面に追加したアイコンから開いているかご確認ください（Safariのタブから開いている場合は通知を利用できません）。');
+      alert(deniedGuideMessage());
     });
   } else if (Notification.permission === 'granted') {
     alert('通知は有効です。予定開始の15分前にお知らせします。\n（このアプリを開いている間のみ通知されます）');
   } else {
-    alert('通知がブロックされています。ブラウザ／端末の通知設定からこのサイトの通知を許可してください。');
+    alert(deniedGuideMessage());
   }
 });
+
+/* 端末・ブラウザに応じた通知許可の案内文 */
+function deniedGuideMessage(){
+  if (isIOSDevice()) {
+    return '通知が許可されませんでした。\niPhoneの場合は、ホーム画面に追加したアイコンから開いているかご確認ください（Safariのタブから開いている場合は通知を利用できません。iOS 16.4以降が必要です）。';
+  }
+  if (isAndroidDevice()) {
+    return '通知がブロックされています。以下をご確認ください。\n\n① ブラウザのアドレスバー左側の鍵（またはℹ️）アイコン→「権限」→「通知」を「許可」に変更\n② Androidの「設定」→「アプリ」→ご利用中のブラウザ→「通知」がONになっているか確認\n\n上記を確認後、ページを再読み込みしてもう一度お試しください。';
+  }
+  return '通知がブロックされています。ブラウザ／端末の通知設定からこのサイトの通知を許可してください。設定変更後はページの再読み込みが必要な場合があります。';
+}
 
 function clearAllNotifyTimers(){
   Object.values(scheduledNotifyTimers).forEach(tid => clearTimeout(tid));
