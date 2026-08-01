@@ -36,6 +36,16 @@ document.addEventListener('DOMContentLoaded', () => {
   link.href = manifestURL;
   document.head.appendChild(link);
 });
+
+// 通知表示（showNotification）のためのService Worker登録
+// ※ 同じ場所に sw.js を配置してください（iOSでは通知に必須です）
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      console.warn('Service Workerの登録に失敗しました（sw.jsが同じフォルダにあるか確認してください）');
+    });
+  });
+}
 </script>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -589,11 +599,19 @@ function updateNotifyBtnLabel(){
 }
 
 notifyBtn.addEventListener('click', () => {
-  if (!('Notification' in window)) return;
+  if (!('Notification' in window)) {
+    alert('この端末・ブラウザは通知に対応していません。\n\niPhoneの場合：Safariで開いた画面右下の共有ボタン→「ホーム画面に追加」でアプリを追加し、ホーム画面のアイコンから開いた状態で再度お試しください（iOS 16.4以降が必要です）。');
+    return;
+  }
   if (Notification.permission === 'default') {
-    Notification.requestPermission().then(() => {
+    Notification.requestPermission().then((result) => {
       updateNotifyBtnLabel();
       scheduleNotifications();
+      if (result !== 'granted') {
+        alert('通知が許可されませんでした。\niPhoneの場合は、ホーム画面に追加したアイコンから開いているかご確認ください。');
+      }
+    }).catch(() => {
+      alert('通知の許可リクエストに失敗しました。\niPhoneの場合は、ホーム画面に追加したアイコンから開いているかご確認ください（Safariのタブから開いている場合は通知を利用できません）。');
     });
   } else if (Notification.permission === 'granted') {
     alert('通知は有効です。予定開始の15分前にお知らせします。\n（このアプリを開いている間のみ通知されます）');
@@ -620,14 +638,24 @@ function scheduleNotifications(){
     const delay = notifyMs - now;
     if (delay > 0 && delay <= maxAheadMs) {
       scheduledNotifyTimers[id] = setTimeout(() => {
-        try {
-          new Notification('もうすぐ開始です ⏰', {
-            body: `${t.name}（${fmtTime(t.planStart)} 開始）`
-          });
-        } catch (e) { /* 通知生成に失敗した場合は無視 */ }
+        fireNotification('もうすぐ開始です ⏰', `${t.name}（${fmtTime(t.planStart)} 開始）`);
       }, delay);
     }
   });
+}
+
+/* Service Worker経由（iOSで必須）を優先し、使えない場合は通常のNotificationにフォールバック */
+function fireNotification(title, body){
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, { body }).catch(() => fallbackNotify(title, body));
+    }).catch(() => fallbackNotify(title, body));
+  } else {
+    fallbackNotify(title, body);
+  }
+}
+function fallbackNotify(title, body){
+  try { new Notification(title, { body }); } catch (e) { /* 通知生成に失敗した場合は無視 */ }
 }
 updateNotifyBtnLabel();
 
