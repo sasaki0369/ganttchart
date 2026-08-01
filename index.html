@@ -1099,11 +1099,13 @@ function renderList(){
     groups[key].push([id, t]);
   });
 
-  const rOrder = { A:0, B:1, C:2, D:3, P:4 };
   const sortWithinGroup = (a, b) => {
-    if (a[1].done !== b[1].done) return a[1].done ? 1 : -1;
-    if (rOrder[a[1].rank] !== rOrder[b[1].rank]) return rOrder[a[1].rank] - rOrder[b[1].rank];
-    return (a[1].planStart||'').localeCompare(b[1].planStart||'');
+    const aStart = a[1].planStart || '';
+    const bStart = b[1].planStart || '';
+    if (aStart !== bStart) return aStart.localeCompare(bStart);
+    const aEnd = a[1].planEnd || '';
+    const bEnd = b[1].planEnd || '';
+    return aEnd.localeCompare(bEnd);
   };
   Object.values(groups).forEach(arr => arr.sort(sortWithinGroup));
 
