@@ -159,6 +159,14 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .day-progress .ring span{ background:#fff; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
 
 /* Task list */
+.date-group-header{
+  display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:800; color: var(--ink-soft);
+  padding:12px 4px 6px; border-bottom:1px solid var(--line); margin-bottom:2px;
+}
+.date-group-header:first-child{ padding-top:4px; }
+.date-group-header .badge-today{ background: var(--accent); color:#fff; border-radius:10px; padding:1px 8px; font-size:11px; }
+.date-group-header .badge-tomorrow{ background: var(--accent-soft); color: var(--accent); border-radius:10px; padding:1px 8px; font-size:11px; }
+.date-group-header .badge-overdue{ background:#FDE7E7; color: var(--rankA); border-radius:10px; padding:1px 8px; font-size:11px; }
 .task-row{
   display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line); cursor:pointer;
 }
@@ -314,6 +322,13 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
       <div class="filter-chip" data-rank="C">C</div>
       <div class="filter-chip" data-rank="D">📝 備忘</div>
       <div class="filter-chip" data-rank="P">🏠 プライベート</div>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--ink-soft); cursor:pointer;">
+        <input type="checkbox" id="showCompletedToggle" checked style="width:auto;">
+        完了済みを表示
+      </label>
     </div>
 
     <div class="card" id="taskListCard">
@@ -697,6 +712,11 @@ document.querySelectorAll('.filter-chip').forEach(chip => {
   });
 });
 
+/* 完了済み表示/非表示トグル */
+document.getElementById('showCompletedToggle').addEventListener('change', () => {
+  renderList();
+});
+
 /* ---------- タスク追加モーダル ---------- */
 const taskOverlay = document.getElementById('taskOverlay');
 document.getElementById('fabAdd').addEventListener('click', () => {
@@ -1056,59 +1076,102 @@ function renderList(){
   list.innerHTML = '';
 
   const now = new Date();
+  const showCompleted = document.getElementById('showCompletedToggle').checked;
 
-  const todayTasks = Object.entries(tasks).filter(([id,t]) => {
+  const filteredTasks = Object.entries(tasks).filter(([id,t]) => {
     if (currentFilter !== 'ALL' && t.rank !== currentFilter) return false;
+    if (!showCompleted && t.done) return false;
     return true;
-  }).sort((a,b) => {
-    // 日時未定を最優先、次に期日のみ、その後日時指定。各グループ内は未完了優先、ランク順、日時順
-    const groupOf = t => t.planStart ? 2 : (t.planDateOnly ? 1 : 0);
-    const ga = groupOf(a[1]), gb = groupOf(b[1]);
-    if (ga !== gb) return ga - gb;
+  });
+
+  emptyHint.style.display = filteredTasks.length ? 'none' : 'block';
+
+  // 期日ごとにグループ化（日時未定は 'undecided' として一番上に固定）
+  const groups = {};
+  const groupKeyOf = (t) => {
+    if (t.planStart) return toLocalDateStr(new Date(t.planStart));
+    if (t.planDateOnly) return t.planDateOnly;
+    return 'undecided';
+  };
+  filteredTasks.forEach(([id, t]) => {
+    const key = groupKeyOf(t);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push([id, t]);
+  });
+
+  const rOrder = { A:0, B:1, C:2, D:3, P:4 };
+  const sortWithinGroup = (a, b) => {
     if (a[1].done !== b[1].done) return a[1].done ? 1 : -1;
-    const rOrder = { A:0, B:1, C:2, D:3, P:4 };
     if (rOrder[a[1].rank] !== rOrder[b[1].rank]) return rOrder[a[1].rank] - rOrder[b[1].rank];
-    if (ga === 1) return (a[1].planDateOnly||'').localeCompare(b[1].planDateOnly||'');
     return (a[1].planStart||'').localeCompare(b[1].planStart||'');
+  };
+  Object.values(groups).forEach(arr => arr.sort(sortWithinGroup));
+
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === 'undecided') return -1;
+    if (b === 'undecided') return 1;
+    return a.localeCompare(b);
   });
 
-  emptyHint.style.display = todayTasks.length ? 'none' : 'block';
+  const todayStrVal = todayStr();
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = toLocalDateStr(tomorrow);
+  const weekdayLabels = ['日','月','火','水','木','金','土'];
 
-  todayTasks.forEach(([id, t]) => {
-    const row = document.createElement('div');
-    const isOverdue = !t.done && (
-      (t.planEnd && new Date(t.planEnd) < now) ||
-      (t.planDateOnly && new Date(t.planDateOnly + 'T23:59:59') < now)
-    );
-    const isUndated = !t.planStart && !t.planDateOnly;
-    row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '');
-    let planTxt;
-    if (t.planStart) planTxt = `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}`;
-    else if (t.planDateOnly) planTxt = `期日 ${fmtDateOnly(t.planDateOnly)}`;
-    else planTxt = '日時未定';
-    const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}` : '';
-    const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
-    row.innerHTML = `
-      <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : (t.rank === 'D' ? '📝' : t.rank)}</div>
-      <div class="task-main">
-        <div class="task-name ${t.done?'done':''}">${t.repeatEnabled ? '🔁 ' : ''}${escapeHtml(t.name)}</div>
-        <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
-        ${memoHtml}
-      </div>
-      <div class="task-actions">
-        <button class="icon-btn done-btn" title="${t.done ? '実績編集' : '実績記録'}">${t.done ? '📝' : '✓'}</button>
-        <button class="icon-btn del-btn" title="削除">🗑</button>
-      </div>
-    `;
-    const doneBtn = row.querySelector('.done-btn');
-    const delBtn = row.querySelector('.del-btn');
-    doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
-    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(id); });
-    row.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
-    list.appendChild(row);
+  function formatGroupHeader(key){
+    if (key === 'undecided') return { text: '❔ 日時未定', badge: '' };
+    const d = new Date(key + 'T00:00:00');
+    const text = `📅 ${d.getMonth()+1}/${d.getDate()}(${weekdayLabels[d.getDay()]})`;
+    let badge = '';
+    if (key === todayStrVal) badge = '<span class="badge-today">今日</span>';
+    else if (key === tomorrowStr) badge = '<span class="badge-tomorrow">明日</span>';
+    else if (key < todayStrVal) badge = '<span class="badge-overdue">期限超過</span>';
+    return { text, badge };
+  }
+
+  sortedKeys.forEach(key => {
+    const header = document.createElement('div');
+    header.className = 'date-group-header';
+    const { text, badge } = formatGroupHeader(key);
+    header.innerHTML = `<span>${text}</span>${badge}`;
+    list.appendChild(header);
+
+    groups[key].forEach(([id, t]) => {
+      const row = document.createElement('div');
+      const isOverdue = !t.done && (
+        (t.planEnd && new Date(t.planEnd) < now) ||
+        (t.planDateOnly && new Date(t.planDateOnly + 'T23:59:59') < now)
+      );
+      const isUndated = !t.planStart && !t.planDateOnly;
+      row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '');
+      let planTxt;
+      if (t.planStart) planTxt = `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}`;
+      else if (t.planDateOnly) planTxt = `期日 ${fmtDateOnly(t.planDateOnly)}`;
+      else planTxt = '日時未定';
+      const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}` : '';
+      const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
+      row.innerHTML = `
+        <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : (t.rank === 'D' ? '📝' : t.rank)}</div>
+        <div class="task-main">
+          <div class="task-name ${t.done?'done':''}">${t.repeatEnabled ? '🔁 ' : ''}${escapeHtml(t.name)}</div>
+          <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
+          ${memoHtml}
+        </div>
+        <div class="task-actions">
+          <button class="icon-btn done-btn" title="${t.done ? '実績編集' : '実績記録'}">${t.done ? '📝' : '✓'}</button>
+          <button class="icon-btn del-btn" title="削除">🗑</button>
+        </div>
+      `;
+      const doneBtn = row.querySelector('.done-btn');
+      const delBtn = row.querySelector('.del-btn');
+      doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
+      delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(id); });
+      row.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
+      list.appendChild(row);
+    });
   });
 
-  // 今日の達成率（備忘・プライベートは実績集計の対象外。ガントチャートには表示されます）
+  // 今日の達成率（備忘・プライベートは実績集計の対象外。ガントチャートには表示されます。表示/非表示トグルの影響は受けません）
   const achievementTasks = Object.values(tasks).filter(t => isAchievementRank(t.rank));
   const total = achievementTasks.length;
   const done = achievementTasks.filter(t => t.done).length;
