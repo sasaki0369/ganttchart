@@ -172,6 +172,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .task-row:last-child{ border-bottom:none; }
 .task-row.row-undated{ background: #F5F1FC; border-radius:10px; margin-bottom:2px; }
 .task-row.row-overdue{ background: #FFF0EE; border-radius:10px; margin-bottom:2px; }
+.task-row.row-inprogress{ background: #FFF7E0; border-radius:10px; margin-bottom:2px; }
 .rank-badge{
   width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
   font-weight:800; font-size:14px;
@@ -188,6 +189,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
   font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;
 }
 .icon-btn.done-btn{ background:#E3F5EC; color: var(--rankC); }
+.icon-btn.start-btn{ background:#FFF0DC; color: var(--rankB); }
 .icon-btn.del-btn{ background:#FDE7E7; color: var(--rankA); }
 
 .fab{
@@ -967,6 +969,14 @@ function deleteTask(id){
   if (confirm('このタスクを削除しますか？')) tasksRef.child(id).remove();
 }
 
+/* ---------- 今すぐ開始（実績開始時刻を現在時刻で記録） ---------- */
+function startTaskNow(id){
+  const t = tasks[id];
+  if (!t) return;
+  const data = Object.assign({}, t, { actualStart: new Date().toISOString() });
+  saveTask(id, data);
+}
+
 /* ---------- 繰り返しスケジュール：完了時に翌週分を自動登録 ---------- */
 function createNextRecurrence(completedTask){
   const hasTimeRepeat = !!(completedTask.repeatStartTime && completedTask.repeatEndTime);
@@ -1144,12 +1154,14 @@ function renderList(){
         (t.planDateOnly && new Date(t.planDateOnly + 'T23:59:59') < now)
       );
       const isUndated = !t.planStart && !t.planDateOnly;
-      row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '');
+      const isInProgress = !t.done && !!t.actualStart;
+      row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '') + (isInProgress ? ' row-inprogress' : '');
       let planTxt;
       if (t.planStart) planTxt = `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}`;
       else if (t.planDateOnly) planTxt = `期日 ${fmtDateOnly(t.planDateOnly)}`;
       else planTxt = '日時未定';
-      const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}` : '';
+      const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}`
+        : (isInProgress ? `⏱ ${fmtTime(t.actualStart)}〜 実行中` : '');
       const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
       row.innerHTML = `
         <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : (t.rank === 'D' ? '📝' : t.rank)}</div>
@@ -1159,12 +1171,15 @@ function renderList(){
           ${memoHtml}
         </div>
         <div class="task-actions">
+          ${(!t.done && !t.actualStart) ? `<button class="icon-btn start-btn" title="今すぐ開始">▶</button>` : ``}
           <button class="icon-btn done-btn" title="${t.done ? '実績編集' : '実績記録'}">${t.done ? '📝' : '✓'}</button>
           <button class="icon-btn del-btn" title="削除">🗑</button>
         </div>
       `;
+      const startBtn = row.querySelector('.start-btn');
       const doneBtn = row.querySelector('.done-btn');
       const delBtn = row.querySelector('.del-btn');
+      if (startBtn) startBtn.addEventListener('click', (e) => { e.stopPropagation(); startTaskNow(id); });
       doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
       delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(id); });
       row.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
