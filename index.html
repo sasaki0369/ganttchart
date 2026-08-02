@@ -241,14 +241,19 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .btn.secondary{ background: var(--line); color: var(--ink-soft); }
 
 /* Gantt */
-.gantt-wrap{ overflow-x:auto; }
-.gantt-header-row{ display:flex; border-bottom:2px solid var(--line); padding-bottom:6px; margin-bottom:4px; }
-.gantt-label-col{ width:120px; flex-shrink:0; font-size:11px; font-weight:700; color:var(--ink-soft); }
-.gantt-timeline{ display:flex; flex:1; min-width:480px; }
+.gantt-wrap{ display:flex; }
+.gantt-names-col{ flex-shrink:0; width:110px; }
+.gantt-names-header{ height:14px; padding-bottom:6px; margin-bottom:4px; border-bottom:2px solid var(--line); box-sizing:content-box; }
+.gantt-name-row{
+  height:34px; display:flex; align-items:center; font-size:12.5px; font-weight:700;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:6px; border-bottom:1px solid var(--line);
+}
+.gantt-name-row:last-child{ border-bottom:none; }
+.gantt-scroll-area{ flex:1; min-width:0; overflow-x:auto; }
+.gantt-timeline{ display:flex; min-width:480px; border-bottom:2px solid var(--line); padding-bottom:6px; margin-bottom:4px; }
 .gantt-hour{ flex:1; text-align:center; font-size:10px; color:var(--ink-soft); border-left:1px solid var(--line); }
-.gantt-row{ display:flex; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); }
+.gantt-row{ display:flex; align-items:center; height:34px; border-bottom:1px solid var(--line); min-width:480px; }
 .gantt-row:last-child{ border-bottom:none; }
-.gantt-name{ width:120px; flex-shrink:0; font-size:12.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:6px; }
 .gantt-track{ flex:1; min-width:480px; position:relative; height:34px; background: repeating-linear-gradient(to right, transparent, transparent calc(100%/24 - 1px), var(--line) calc(100%/24 - 1px), var(--line) calc(100%/24)); border-radius:6px; }
 .bar{ position:absolute; height:11px; border-radius:6px; top:2px; }
 .bar.actual{ top:18px; }
@@ -346,11 +351,14 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="date" id="ganttDate" style="border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:12px;">
       </div>
       <div class="gantt-wrap">
-        <div class="gantt-header-row">
-          <div class="gantt-label-col"></div>
-          <div class="gantt-timeline" id="ganttHours"></div>
+        <div class="gantt-names-col">
+          <div class="gantt-names-header"></div>
+          <div id="ganttNames"></div>
         </div>
-        <div id="ganttBody"></div>
+        <div class="gantt-scroll-area">
+          <div class="gantt-timeline" id="ganttHours"></div>
+          <div id="ganttBody"></div>
+        </div>
       </div>
       <div class="empty-hint" id="ganttEmptyHint" style="display:none;">この日の予定はありません。</div>
     </div>
@@ -1281,7 +1289,9 @@ function renderGantt(){
     hoursWrap.appendChild(el);
   }
 
+  const namesWrap = document.getElementById('ganttNames');
   const body = document.getElementById('ganttBody');
+  namesWrap.innerHTML = '';
   body.innerHTML = '';
 
   const dayTasks = Object.entries(tasks).filter(([id, t]) => {
@@ -1297,6 +1307,12 @@ function renderGantt(){
   }
 
   dayTasks.forEach(([id, t]) => {
+    const nameRow = document.createElement('div');
+    nameRow.className = 'gantt-name-row';
+    nameRow.title = t.name;
+    nameRow.textContent = t.name;
+    namesWrap.appendChild(nameRow);
+
     const row = document.createElement('div');
     row.className = 'gantt-row';
     const color = RANK_COLOR[t.rank] || '#999';
@@ -1316,10 +1332,7 @@ function renderGantt(){
       actualBarHtml = `<div class="bar actual" style="left:${left}%;width:${width}%;background:${color};"></div>`;
     }
 
-    row.innerHTML = `
-      <div class="gantt-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
-      <div class="gantt-track">${planBarHtml}${actualBarHtml}</div>
-    `;
+    row.innerHTML = `<div class="gantt-track">${planBarHtml}${actualBarHtml}</div>`;
     body.appendChild(row);
   });
 }
