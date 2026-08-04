@@ -417,8 +417,14 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="datetime-local" id="inputPlanStart" step="600">
       </div>
       <div class="field">
-        <label>予定終了</label>
-        <input type="datetime-local" id="inputPlanEnd" step="600">
+        <label>所要時間</label>
+        <select id="inputPlanDuration">
+          <option value="10">10分</option>
+          <option value="30">30分</option>
+          <option value="60" selected>1時間</option>
+          <option value="120">2時間</option>
+          <option value="180">3時間</option>
+        </select>
       </div>
     </div>
     <div class="row2" id="repeatTimeRow" style="display:none;">
@@ -427,8 +433,14 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="time" id="inputRepeatStartTime" step="600">
       </div>
       <div class="field">
-        <label>終了時刻</label>
-        <input type="time" id="inputRepeatEndTime" step="600">
+        <label>所要時間</label>
+        <select id="inputRepeatDuration">
+          <option value="10">10分</option>
+          <option value="30">30分</option>
+          <option value="60" selected>1時間</option>
+          <option value="120">2時間</option>
+          <option value="180">3時間</option>
+        </select>
       </div>
     </div>
     <div class="field" id="dueDateRow" style="display:none;">
@@ -476,8 +488,14 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="datetime-local" id="inputActualStart" step="600">
       </div>
       <div class="field">
-        <label>実績終了</label>
-        <input type="datetime-local" id="inputActualEnd" step="600">
+        <label>所要時間</label>
+        <select id="inputActualDuration">
+          <option value="10">10分</option>
+          <option value="30">30分</option>
+          <option value="60" selected>1時間</option>
+          <option value="120">2時間</option>
+          <option value="180">3時間</option>
+        </select>
       </div>
     </div>
     <div class="modal-actions">
@@ -513,6 +531,14 @@ const RANK_BG    = { A: '#FDE7E7', B: '#FCF0DA', C: '#E3F5EC', D: '#E7EEF5', P: 
 const RANK_POINT = { A: 30, B: 20, C: 12, D: 6, P: 10 };
 /* 「備忘」(旧D)と「プライベート」(P)は完了・達成率などの実績集計の対象外（ガントチャートには表示する） */
 function isAchievementRank(rank){ return rank === 'A' || rank === 'B' || rank === 'C'; }
+
+/* 所要時間プルダウンの選択肢（分） */
+const DURATION_OPTIONS = [10, 30, 60, 120, 180];
+function pickClosestDuration(minutes){
+  return DURATION_OPTIONS.reduce((closest, opt) =>
+    Math.abs(opt - minutes) < Math.abs(closest - minutes) ? opt : closest
+  , DURATION_OPTIONS[0]);
+}
 
 const BADGES = [
   { id:'first', emoji:'🌱', name:'はじめの一歩', cond: s => s.totalDone >= 1 },
@@ -735,7 +761,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.getElementById('inputMemo').value = '';
   document.getElementById('inputDueDate').value = '';
   document.getElementById('inputRepeatStartTime').value = '';
-  document.getElementById('inputRepeatEndTime').value = '';
+  document.getElementById('inputRepeatDuration').value = '60';
   document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
@@ -745,9 +771,8 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
   setDateMode('time');
   const start = getDefaultStartTime();
-  const later = new Date(start.getTime() + 60*60*1000);
   document.getElementById('inputPlanStart').value = fmtDateTimeLocal(start);
-  document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(later);
+  document.getElementById('inputPlanDuration').value = '60';
   taskOverlay.classList.add('show');
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
@@ -808,26 +833,6 @@ document.querySelectorAll('#weekdaySelect label').forEach(label => {
   });
 });
 
-/* 予定開始を選択したら、予定終了を自動で1時間後にセット */
-document.getElementById('inputPlanStart').addEventListener('input', () => {
-  const startVal = document.getElementById('inputPlanStart').value;
-  if (!startVal) return;
-  const start = new Date(startVal);
-  const end = new Date(start.getTime() + 60*60*1000);
-  document.getElementById('inputPlanEnd').value = fmtDateTimeLocal(end);
-});
-
-/* 繰り返し用の開始時刻を入力したら、終了時刻を自動で1時間後にセット */
-document.getElementById('inputRepeatStartTime').addEventListener('input', () => {
-  const startVal = document.getElementById('inputRepeatStartTime').value;
-  if (!startVal) return;
-  const [h, m] = startVal.split(':').map(Number);
-  const d = new Date(); d.setHours(h, m, 0, 0);
-  d.setHours(d.getHours() + 1);
-  const pad = n => n.toString().padStart(2,'0');
-  document.getElementById('inputRepeatEndTime').value = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-});
-
 document.querySelectorAll('#rankSelect label').forEach(label => {
   label.addEventListener('click', () => {
     document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
@@ -857,10 +862,10 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const dateModeInput = document.querySelector('#dateModeSelect input:checked');
   const dateMode = dateModeInput ? dateModeInput.value : 'time';
   const planStart = document.getElementById('inputPlanStart').value;
-  const planEnd = document.getElementById('inputPlanEnd').value;
+  const planDurationMin = parseInt(document.getElementById('inputPlanDuration').value, 10);
   const dueDate = document.getElementById('inputDueDate').value;
   const repeatStartTime = document.getElementById('inputRepeatStartTime').value;
-  const repeatEndTime = document.getElementById('inputRepeatEndTime').value;
+  const repeatDurationMin = parseInt(document.getElementById('inputRepeatDuration').value, 10);
   const memo = document.getElementById('inputMemo').value.trim();
   const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
   const weekdayInput = document.querySelector('#weekdaySelect input:checked');
@@ -884,7 +889,6 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     repeatEnabled,
     repeatWeekday: weekday,
     repeatStartTime: isRepeatTimeMode ? repeatStartTime : null,
-    repeatEndTime: isRepeatTimeMode ? (repeatEndTime || repeatStartTime) : null,
     done: existing.done || false,
     actualStart: existing.actualStart || null,
     actualEnd: existing.actualEnd || null,
@@ -892,7 +896,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   });
 
   if (isRepeatTimeMode) {
-    // 繰り返し×時刻指定：日付は選択した曜日から自動算出し、時刻のみ入力を反映
+    // 繰り返し×時刻指定：日付は選択した曜日から自動算出し、時刻＋所要時間を反映
     let occurrenceDateStr;
     if (existing.planStart) {
       const existingDateStr = toLocalDateStr(new Date(existing.planStart));
@@ -901,12 +905,23 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     } else {
       occurrenceDateStr = getNextWeekdayDate(weekday);
     }
-    data.planStart = new Date(`${occurrenceDateStr}T${repeatStartTime}`).toISOString();
-    data.planEnd = new Date(`${occurrenceDateStr}T${data.repeatEndTime}`).toISOString();
+    const startDateTime = new Date(`${occurrenceDateStr}T${repeatStartTime}`);
+    const endDateTime = new Date(startDateTime.getTime() + repeatDurationMin * 60000);
+    const pad = n => n.toString().padStart(2,'0');
+    data.repeatEndTime = `${pad(endDateTime.getHours())}:${pad(endDateTime.getMinutes())}`;
+    data.planStart = startDateTime.toISOString();
+    data.planEnd = endDateTime.toISOString();
     data.planDateOnly = null;
   } else {
-    data.planStart = (dateMode === 'time' && planStart) ? new Date(planStart).toISOString() : null;
-    data.planEnd = (dateMode === 'time' && planEnd) ? new Date(planEnd).toISOString() : null;
+    data.repeatEndTime = null;
+    if (dateMode === 'time' && planStart) {
+      const startDateTime = new Date(planStart);
+      data.planStart = startDateTime.toISOString();
+      data.planEnd = new Date(startDateTime.getTime() + planDurationMin * 60000).toISOString();
+    } else {
+      data.planStart = null;
+      data.planEnd = null;
+    }
     data.planDateOnly = (dateMode === 'date' && dueDate) ? dueDate : null;
   }
 
@@ -922,7 +937,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
 const actualOverlay = document.getElementById('actualOverlay');
 document.getElementById('cancelActualBtn').addEventListener('click', () => actualOverlay.classList.remove('show'));
 
-/* 予定通り完了：予定時間をそのまま実績時間欄にコピー */
+/* 予定通り完了：予定の開始時刻・所要時間をそのまま実績欄にコピー */
 document.getElementById('planCompleteBtn').addEventListener('click', () => {
   const t = tasks[currentActualId];
   if (!t || !t.planStart || !t.planEnd){
@@ -930,16 +945,8 @@ document.getElementById('planCompleteBtn').addEventListener('click', () => {
     return;
   }
   document.getElementById('inputActualStart').value = fmtDateTimeLocal(new Date(t.planStart));
-  document.getElementById('inputActualEnd').value = fmtDateTimeLocal(new Date(t.planEnd));
-});
-
-/* 実績開始を選択したら、実績終了を自動で1時間後にセット */
-document.getElementById('inputActualStart').addEventListener('input', () => {
-  const startVal = document.getElementById('inputActualStart').value;
-  if (!startVal) return;
-  const start = new Date(startVal);
-  const end = new Date(start.getTime() + 60*60*1000);
-  document.getElementById('inputActualEnd').value = fmtDateTimeLocal(end);
+  const durationMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
+  document.getElementById('inputActualDuration').value = String(pickClosestDuration(durationMin));
 });
 
 function openActualModal(id){
@@ -948,20 +955,28 @@ function openActualModal(id){
   document.getElementById('actualTaskName').textContent = t.name;
   const now = roundTo10Min(new Date());
   document.getElementById('inputActualStart').value = t.actualStart ? fmtDateTimeLocal(new Date(t.actualStart)) : (t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : fmtDateTimeLocal(now));
-  document.getElementById('inputActualEnd').value = fmtDateTimeLocal(now);
+  let durationMin = 60;
+  if (t.actualStart && t.actualEnd) {
+    durationMin = Math.round((new Date(t.actualEnd) - new Date(t.actualStart)) / 60000);
+  } else if (t.planStart && t.planEnd) {
+    durationMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
+  }
+  document.getElementById('inputActualDuration').value = String(pickClosestDuration(durationMin));
   actualOverlay.classList.add('show');
 }
 
 document.getElementById('saveActualBtn').addEventListener('click', () => {
   const id = currentActualId;
   const t = tasks[id];
-  const actualStart = document.getElementById('inputActualStart').value;
-  const actualEnd = document.getElementById('inputActualEnd').value;
-  if (!actualStart || !actualEnd){ alert('開始・終了時刻を入力してください'); return; }
+  const actualStartVal = document.getElementById('inputActualStart').value;
+  const durationMin = parseInt(document.getElementById('inputActualDuration').value, 10);
+  if (!actualStartVal){ alert('開始時刻を入力してください'); return; }
   const wasDone = t.done;
+  const startDate = new Date(actualStartVal);
+  const endDate = new Date(startDate.getTime() + durationMin * 60000);
   const data = Object.assign({}, t, {
-    actualStart: new Date(actualStart).toISOString(),
-    actualEnd: new Date(actualEnd).toISOString(),
+    actualStart: startDate.toISOString(),
+    actualEnd: endDate.toISOString(),
     done: true
   });
   saveTask(id, data);
@@ -1261,12 +1276,24 @@ function openEditModal(t){
     l.querySelector('input').checked = active;
   });
   document.getElementById('inputRepeatStartTime').value = t.repeatStartTime || '';
-  document.getElementById('inputRepeatEndTime').value = t.repeatEndTime || '';
+  if (t.repeatStartTime && t.repeatEndTime) {
+    const [sh, sm] = t.repeatStartTime.split(':').map(Number);
+    const [eh, em] = t.repeatEndTime.split(':').map(Number);
+    const diffMin = (eh*60+em) - (sh*60+sm);
+    document.getElementById('inputRepeatDuration').value = String(pickClosestDuration(diffMin > 0 ? diffMin : 60));
+  } else {
+    document.getElementById('inputRepeatDuration').value = '60';
+  }
 
   const mode = t.planStart ? 'time' : (t.planDateOnly ? 'date' : 'undecided');
   setDateMode(mode);
   document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
-  document.getElementById('inputPlanEnd').value = t.planEnd ? fmtDateTimeLocal(new Date(t.planEnd)) : '';
+  if (t.planStart && t.planEnd) {
+    const diffMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
+    document.getElementById('inputPlanDuration').value = String(pickClosestDuration(diffMin));
+  } else {
+    document.getElementById('inputPlanDuration').value = '60';
+  }
   document.getElementById('inputDueDate').value = t.planDateOnly || '';
   taskOverlay.classList.add('show');
 }
