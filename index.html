@@ -173,6 +173,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .task-row.row-undated{ background: #F5F1FC; border-radius:10px; margin-bottom:2px; }
 .task-row.row-overdue{ background: #FFF0EE; border-radius:10px; margin-bottom:2px; }
 .task-row.row-inprogress{ background: #FFF7E0; border-radius:10px; margin-bottom:2px; }
+.task-row.row-cancelled{ background: #F1F1F1; border-radius:10px; margin-bottom:2px; opacity:0.75; }
 .rank-badge{
   width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
   font-weight:800; font-size:14px;
@@ -180,6 +181,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .task-main{ flex:1; min-width:0; }
 .task-name{ font-weight:700; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .task-name.done{ text-decoration: line-through; color: var(--ink-soft); }
+.task-name.cancelled{ text-decoration: line-through; color: #A39B92; }
 .task-meta{ font-size:11.5px; color: var(--ink-soft); margin-top:2px; }
 .task-memo{ font-size:11.5px; color: var(--ink-soft); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .task-memo a{ color: var(--accent); text-decoration:underline; }
@@ -190,6 +192,8 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 }
 .icon-btn.done-btn{ background:#E3F5EC; color: var(--rankC); }
 .icon-btn.start-btn{ background:#FFF0DC; color: var(--rankB); }
+.icon-btn.cancel-btn{ background:#F1F1F1; color:#8A7D72; }
+.icon-btn.resume-btn{ background:#E7EEF5; color: var(--rankD); }
 .icon-btn.del-btn{ background:#FDE7E7; color: var(--rankA); }
 
 .fab{
@@ -1000,6 +1004,14 @@ function startTaskNow(id){
   saveTask(id, data);
 }
 
+/* ---------- 中止／中止取り消し（予定スケジュールは変更しない。完了率には未完了としてカウントされる） ---------- */
+function setTaskCancelled(id, cancelled){
+  const t = tasks[id];
+  if (!t) return;
+  const data = Object.assign({}, t, { cancelled });
+  saveTask(id, data);
+}
+
 /* ---------- 繰り返しスケジュール：完了時に翌週分を自動登録 ---------- */
 function createNextRecurrence(completedTask){
   const hasTimeRepeat = !!(completedTask.repeatStartTime && completedTask.repeatEndTime);
@@ -1172,38 +1184,45 @@ function renderList(){
 
     groups[key].forEach(([id, t]) => {
       const row = document.createElement('div');
-      const isOverdue = !t.done && (
+      const isOverdue = !t.done && !t.cancelled && (
         (t.planEnd && new Date(t.planEnd) < now) ||
         (t.planDateOnly && new Date(t.planDateOnly + 'T23:59:59') < now)
       );
       const isUndated = !t.planStart && !t.planDateOnly;
-      const isInProgress = !t.done && !!t.actualStart;
-      row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '') + (isInProgress ? ' row-inprogress' : '');
+      const isInProgress = !t.done && !t.cancelled && !!t.actualStart;
+      row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '') + (isInProgress ? ' row-inprogress' : '') + (t.cancelled ? ' row-cancelled' : '');
       let planTxt;
       if (t.planStart) planTxt = `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}`;
       else if (t.planDateOnly) planTxt = `期日 ${fmtDateOnly(t.planDateOnly)}`;
       else planTxt = '日時未定';
       const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}`
-        : (isInProgress ? `⏱ ${fmtTime(t.actualStart)}〜 実行中` : '');
+        : (t.cancelled ? '🚫 中止' : (isInProgress ? `⏱ ${fmtTime(t.actualStart)}〜 実行中` : ''));
       const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
       row.innerHTML = `
         <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : (t.rank === 'D' ? '📝' : t.rank)}</div>
         <div class="task-main">
-          <div class="task-name ${t.done?'done':''}">${t.repeatEnabled ? '🔁 ' : ''}${escapeHtml(t.name)}</div>
+          <div class="task-name ${t.done?'done':''} ${t.cancelled?'cancelled':''}">${t.repeatEnabled ? '🔁 ' : ''}${escapeHtml(t.name)}</div>
           <div class="task-meta">予定 ${planTxt}${actualTxt ? ' ／ ' + actualTxt : ''}</div>
           ${memoHtml}
         </div>
         <div class="task-actions">
-          ${(!t.done && !t.actualStart) ? `<button class="icon-btn start-btn" title="今すぐ開始">▶</button>` : ``}
-          <button class="icon-btn done-btn" title="${t.done ? '実績編集' : '実績記録'}">${t.done ? '📝' : '✓'}</button>
+          ${(!t.done && !t.cancelled && !t.actualStart) ? `<button class="icon-btn start-btn" title="今すぐ開始">▶</button>` : ``}
+          ${(!t.done && !t.cancelled) ? `<button class="icon-btn done-btn" title="実績記録">✓</button>` : ``}
+          ${t.done ? `<button class="icon-btn done-btn" title="実績編集">📝</button>` : ``}
+          ${(!t.done && !t.cancelled) ? `<button class="icon-btn cancel-btn" title="中止にする">✕</button>` : ``}
+          ${(!t.done && t.cancelled) ? `<button class="icon-btn resume-btn" title="中止を取り消す">↩</button>` : ``}
           <button class="icon-btn del-btn" title="削除">🗑</button>
         </div>
       `;
       const startBtn = row.querySelector('.start-btn');
       const doneBtn = row.querySelector('.done-btn');
+      const cancelBtn = row.querySelector('.cancel-btn');
+      const resumeBtn = row.querySelector('.resume-btn');
       const delBtn = row.querySelector('.del-btn');
       if (startBtn) startBtn.addEventListener('click', (e) => { e.stopPropagation(); startTaskNow(id); });
-      doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
+      if (doneBtn) doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
+      if (cancelBtn) cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); setTaskCancelled(id, true); });
+      if (resumeBtn) resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); setTaskCancelled(id, false); });
       delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(id); });
       row.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
       list.appendChild(row);
