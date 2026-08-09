@@ -1010,6 +1010,9 @@ function setTaskCancelled(id, cancelled){
   if (!t) return;
   const data = Object.assign({}, t, { cancelled });
   saveTask(id, data);
+  if (cancelled && data.repeatEnabled) {
+    createNextRecurrence(data);
+  }
 }
 
 /* ---------- 繰り返しスケジュール：完了時に翌週分を自動登録 ---------- */
@@ -1124,7 +1127,7 @@ function renderList(){
 
   const filteredTasks = Object.entries(tasks).filter(([id,t]) => {
     if (currentFilter !== 'ALL' && t.rank !== currentFilter) return false;
-    if (!showCompleted && t.done) return false;
+    if (!showCompleted && (t.done || t.cancelled)) return false;
     return true;
   });
 
