@@ -238,6 +238,15 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .rank-select label.dmDate.active{ background: #E3F5EC; border-color: var(--rankC); color: var(--rankC); }
 .rank-select label.dmNone.active{ background: #F5F1FC; border-color: var(--rankP); color: var(--rankP); }
 .row2{ display:flex; gap:10px; }
+.duration-picker{ margin-top:2px; }
+.duration-total{ font-weight:800; font-size:17px; color: var(--accent); margin-bottom:8px; }
+.duration-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+.duration-chip{
+  padding:8px 12px; border-radius:10px; border:1.5px solid var(--line); background:#FFFBF7;
+  font-weight:700; font-size:13px; color: var(--ink-soft); cursor:pointer;
+}
+.duration-chip:active{ background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.duration-reset{ background:none; border:none; color: var(--ink-soft); font-size:12px; text-decoration:underline; cursor:pointer; padding:2px 0; }
 .row2 .field{ flex:1; }
 .modal-actions{ display:flex; gap:10px; margin-top:16px; }
 .btn{ flex:1; padding:13px; border-radius:12px; border:none; font-weight:800; font-size:15px; cursor:pointer; }
@@ -415,36 +424,46 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <label class="dmNone" data-mode="undecided"><input type="radio" name="dateMode" value="undecided"><span class="opt">❔ 未定</span></label>
       </div>
     </div>
-    <div class="row2" id="planDateRow">
+    <div id="planDateRow">
       <div class="field">
         <label>予定開始</label>
         <input type="datetime-local" id="inputPlanStart" step="600">
       </div>
       <div class="field">
         <label>所要時間</label>
-        <select id="inputPlanDuration">
-          <option value="10">10分</option>
-          <option value="30">30分</option>
-          <option value="60" selected>1時間</option>
-          <option value="120">2時間</option>
-          <option value="180">3時間</option>
-        </select>
+        <div class="duration-picker">
+          <div class="duration-total" id="planDurationTotalDisplay">1時間</div>
+          <div class="duration-chips">
+            <button type="button" class="duration-chip" data-target="inputPlanDuration" data-total="planDurationTotalDisplay" data-minutes="10">+10分</button>
+            <button type="button" class="duration-chip" data-target="inputPlanDuration" data-total="planDurationTotalDisplay" data-minutes="30">+30分</button>
+            <button type="button" class="duration-chip" data-target="inputPlanDuration" data-total="planDurationTotalDisplay" data-minutes="60">+1時間</button>
+            <button type="button" class="duration-chip" data-target="inputPlanDuration" data-total="planDurationTotalDisplay" data-minutes="120">+2時間</button>
+            <button type="button" class="duration-chip" data-target="inputPlanDuration" data-total="planDurationTotalDisplay" data-minutes="180">+3時間</button>
+          </div>
+          <button type="button" class="duration-reset" data-target="inputPlanDuration" data-total="planDurationTotalDisplay">リセット</button>
+        </div>
+        <input type="hidden" id="inputPlanDuration" value="60">
       </div>
     </div>
-    <div class="row2" id="repeatTimeRow" style="display:none;">
+    <div id="repeatTimeRow" style="display:none;">
       <div class="field">
         <label>開始時刻</label>
         <input type="time" id="inputRepeatStartTime" step="600">
       </div>
       <div class="field">
         <label>所要時間</label>
-        <select id="inputRepeatDuration">
-          <option value="10">10分</option>
-          <option value="30">30分</option>
-          <option value="60" selected>1時間</option>
-          <option value="120">2時間</option>
-          <option value="180">3時間</option>
-        </select>
+        <div class="duration-picker">
+          <div class="duration-total" id="repeatDurationTotalDisplay">1時間</div>
+          <div class="duration-chips">
+            <button type="button" class="duration-chip" data-target="inputRepeatDuration" data-total="repeatDurationTotalDisplay" data-minutes="10">+10分</button>
+            <button type="button" class="duration-chip" data-target="inputRepeatDuration" data-total="repeatDurationTotalDisplay" data-minutes="30">+30分</button>
+            <button type="button" class="duration-chip" data-target="inputRepeatDuration" data-total="repeatDurationTotalDisplay" data-minutes="60">+1時間</button>
+            <button type="button" class="duration-chip" data-target="inputRepeatDuration" data-total="repeatDurationTotalDisplay" data-minutes="120">+2時間</button>
+            <button type="button" class="duration-chip" data-target="inputRepeatDuration" data-total="repeatDurationTotalDisplay" data-minutes="180">+3時間</button>
+          </div>
+          <button type="button" class="duration-reset" data-target="inputRepeatDuration" data-total="repeatDurationTotalDisplay">リセット</button>
+        </div>
+        <input type="hidden" id="inputRepeatDuration" value="60">
       </div>
     </div>
     <div class="field" id="dueDateRow" style="display:none;">
@@ -486,21 +505,24 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
     <h2>実績を記録</h2>
     <div class="field" style="font-weight:700;" id="actualTaskName"></div>
     <button class="btn secondary" id="planCompleteBtn" style="width:100%; margin-bottom:12px;">📌 予定通り完了</button>
-    <div class="row2">
-      <div class="field">
-        <label>実績開始</label>
-        <input type="datetime-local" id="inputActualStart" step="600">
+    <div class="field">
+      <label>実績開始</label>
+      <input type="datetime-local" id="inputActualStart" step="600">
+    </div>
+    <div class="field">
+      <label>所要時間</label>
+      <div class="duration-picker">
+        <div class="duration-total" id="actualDurationTotalDisplay">1時間</div>
+        <div class="duration-chips">
+          <button type="button" class="duration-chip" data-target="inputActualDuration" data-total="actualDurationTotalDisplay" data-minutes="10">+10分</button>
+          <button type="button" class="duration-chip" data-target="inputActualDuration" data-total="actualDurationTotalDisplay" data-minutes="30">+30分</button>
+          <button type="button" class="duration-chip" data-target="inputActualDuration" data-total="actualDurationTotalDisplay" data-minutes="60">+1時間</button>
+          <button type="button" class="duration-chip" data-target="inputActualDuration" data-total="actualDurationTotalDisplay" data-minutes="120">+2時間</button>
+          <button type="button" class="duration-chip" data-target="inputActualDuration" data-total="actualDurationTotalDisplay" data-minutes="180">+3時間</button>
+        </div>
+        <button type="button" class="duration-reset" data-target="inputActualDuration" data-total="actualDurationTotalDisplay">リセット</button>
       </div>
-      <div class="field">
-        <label>所要時間</label>
-        <select id="inputActualDuration">
-          <option value="10">10分</option>
-          <option value="30">30分</option>
-          <option value="60" selected>1時間</option>
-          <option value="120">2時間</option>
-          <option value="180">3時間</option>
-        </select>
-      </div>
+      <input type="hidden" id="inputActualDuration" value="60">
     </div>
     <div class="modal-actions">
       <button class="btn secondary" id="cancelActualBtn">キャンセル</button>
@@ -536,13 +558,37 @@ const RANK_POINT = { A: 30, B: 20, C: 12, D: 6, P: 10 };
 /* 「備忘」(旧D)と「プライベート」(P)は完了・達成率などの実績集計の対象外（ガントチャートには表示する） */
 function isAchievementRank(rank){ return rank === 'A' || rank === 'B' || rank === 'C'; }
 
-/* 所要時間プルダウンの選択肢（分） */
-const DURATION_OPTIONS = [10, 30, 60, 120, 180];
-function pickClosestDuration(minutes){
-  return DURATION_OPTIONS.reduce((closest, opt) =>
-    Math.abs(opt - minutes) < Math.abs(closest - minutes) ? opt : closest
-  , DURATION_OPTIONS[0]);
+/* 所要時間ピッカー（タップした分数を積み上げて合計を表示） */
+function formatDurationLabel(minutes){
+  const m = Math.max(0, minutes || 0);
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (h === 0 && mm === 0) return '0分';
+  let label = '';
+  if (h > 0) label += h + '時間';
+  if (mm > 0) label += mm + '分';
+  return label;
 }
+function setDurationMinutes(inputId, totalId, minutes){
+  document.getElementById(inputId).value = String(Math.max(0, minutes || 0));
+  document.getElementById(totalId).textContent = formatDurationLabel(minutes);
+}
+document.querySelectorAll('.duration-chip').forEach(chip => {
+  chip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const inputId = chip.dataset.target;
+    const totalId = chip.dataset.total;
+    const add = parseInt(chip.dataset.minutes, 10);
+    const current = parseInt(document.getElementById(inputId).value, 10) || 0;
+    setDurationMinutes(inputId, totalId, current + add);
+  });
+});
+document.querySelectorAll('.duration-reset').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setDurationMinutes(btn.dataset.target, btn.dataset.total, 0);
+  });
+});
 
 const BADGES = [
   { id:'first', emoji:'🌱', name:'はじめの一歩', cond: s => s.totalDone >= 1 },
@@ -765,7 +811,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.getElementById('inputMemo').value = '';
   document.getElementById('inputDueDate').value = '';
   document.getElementById('inputRepeatStartTime').value = '';
-  document.getElementById('inputRepeatDuration').value = '60';
+  setDurationMinutes('inputRepeatDuration', 'repeatDurationTotalDisplay', 60);
   document.querySelectorAll('#rankSelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
@@ -776,7 +822,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   setDateMode('time');
   const start = getDefaultStartTime();
   document.getElementById('inputPlanStart').value = fmtDateTimeLocal(start);
-  document.getElementById('inputPlanDuration').value = '60';
+  setDurationMinutes('inputPlanDuration', 'planDurationTotalDisplay', 60);
   taskOverlay.classList.add('show');
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
@@ -950,7 +996,7 @@ document.getElementById('planCompleteBtn').addEventListener('click', () => {
   }
   document.getElementById('inputActualStart').value = fmtDateTimeLocal(new Date(t.planStart));
   const durationMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
-  document.getElementById('inputActualDuration').value = String(pickClosestDuration(durationMin));
+  setDurationMinutes('inputActualDuration', 'actualDurationTotalDisplay', durationMin);
 });
 
 function openActualModal(id){
@@ -965,7 +1011,7 @@ function openActualModal(id){
   } else if (t.planStart && t.planEnd) {
     durationMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
   }
-  document.getElementById('inputActualDuration').value = String(pickClosestDuration(durationMin));
+  setDurationMinutes('inputActualDuration', 'actualDurationTotalDisplay', durationMin);
   actualOverlay.classList.add('show');
 }
 
@@ -1302,9 +1348,9 @@ function openEditModal(t){
     const [sh, sm] = t.repeatStartTime.split(':').map(Number);
     const [eh, em] = t.repeatEndTime.split(':').map(Number);
     const diffMin = (eh*60+em) - (sh*60+sm);
-    document.getElementById('inputRepeatDuration').value = String(pickClosestDuration(diffMin > 0 ? diffMin : 60));
+    setDurationMinutes('inputRepeatDuration', 'repeatDurationTotalDisplay', diffMin > 0 ? diffMin : 60);
   } else {
-    document.getElementById('inputRepeatDuration').value = '60';
+    setDurationMinutes('inputRepeatDuration', 'repeatDurationTotalDisplay', 60);
   }
 
   const mode = t.planStart ? 'time' : (t.planDateOnly ? 'date' : 'undecided');
@@ -1312,9 +1358,9 @@ function openEditModal(t){
   document.getElementById('inputPlanStart').value = t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : '';
   if (t.planStart && t.planEnd) {
     const diffMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
-    document.getElementById('inputPlanDuration').value = String(pickClosestDuration(diffMin));
+    setDurationMinutes('inputPlanDuration', 'planDurationTotalDisplay', diffMin);
   } else {
-    document.getElementById('inputPlanDuration').value = '60';
+    setDurationMinutes('inputPlanDuration', 'planDurationTotalDisplay', 60);
   }
   document.getElementById('inputDueDate').value = t.planDateOnly || '';
   taskOverlay.classList.add('show');
