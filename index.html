@@ -1390,8 +1390,9 @@ function renderGantt(){
   body.innerHTML = '';
 
   const dayTasks = Object.entries(tasks).filter(([id, t]) => {
-    const d = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly ? t.planDateOnly : (t.actualStart ? toLocalDateStr(new Date(t.actualStart)) : null));
-    return d === targetDate;
+    const planDateKey = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly ? t.planDateOnly : null);
+    const actualDateKey = t.actualStart ? toLocalDateStr(new Date(t.actualStart)) : null;
+    return planDateKey === targetDate || actualDateKey === targetDate;
   }).sort((a,b) => (a[1].planStart||'').localeCompare(b[1].planStart||''));
 
   document.getElementById('ganttEmptyHint').style.display = dayTasks.length ? 'none' : 'block';
@@ -1412,16 +1413,21 @@ function renderGantt(){
     row.className = 'gantt-row';
     const color = RANK_COLOR[t.rank] || '#999';
 
+    const planDateKey = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly ? t.planDateOnly : null);
+    const actualDateKey = t.actualStart ? toLocalDateStr(new Date(t.actualStart)) : null;
+
     let planBarHtml = '';
-    if (t.planStart && t.planEnd){
-      const left = pctOfDay(t.planStart);
-      const width = Math.max(1, pctOfDay(t.planEnd) - left);
-      planBarHtml = `<div class="bar bar-plan" style="left:${left}%;width:${width}%;border-color:${color};"></div>`;
-    } else if (t.planDateOnly){
-      planBarHtml = `<div class="bar bar-plan" style="left:0%;width:100%;border-color:${color};"></div>`;
+    if (planDateKey === targetDate) {
+      if (t.planStart && t.planEnd){
+        const left = pctOfDay(t.planStart);
+        const width = Math.max(1, pctOfDay(t.planEnd) - left);
+        planBarHtml = `<div class="bar bar-plan" style="left:${left}%;width:${width}%;border-color:${color};"></div>`;
+      } else if (t.planDateOnly){
+        planBarHtml = `<div class="bar bar-plan" style="left:0%;width:100%;border-color:${color};"></div>`;
+      }
     }
     let actualBarHtml = '';
-    if (t.actualStart && t.actualEnd){
+    if (actualDateKey === targetDate && t.actualStart && t.actualEnd){
       const left = pctOfDay(t.actualStart);
       const width = Math.max(1, pctOfDay(t.actualEnd) - left);
       actualBarHtml = `<div class="bar actual" style="left:${left}%;width:${width}%;background:${color};"></div>`;
