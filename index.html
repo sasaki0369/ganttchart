@@ -50,6 +50,7 @@ if ('serviceWorker' in navigator) {
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <style>
 :root{
@@ -298,6 +299,11 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 </head>
 <body>
 
+<div id="authLoadingOverlay" style="position:fixed; inset:0; background:var(--bg); z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;">
+  <div style="font-size:40px;">🔐</div>
+  <div style="font-weight:700; color:var(--ink);">Googleアカウントでログインしています…</div>
+</div>
+
 <header>
   <h1>📊 やることガントチャート</h1>
   <div class="status-row">
@@ -539,18 +545,48 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
    ※ご自身のFirebaseプロジェクトの設定値に置き換えてください
    ======================================================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyAnTMERwL4xsOyW6ZMySkf95SdqS2eBQac",
-  authDomain: "gantt--chart.firebaseapp.com",
-  databaseURL: "https://gantt--chart-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "gantt--chart",
-  storageBucket: "gantt--chart.firebasestorage.app",
-  messagingSenderId: "244458558095",
-  appId: "1:244458558095:web:dc82d4a8835fbfef8116fa"
+  apiKey: "AIzaSyAxVn7JUuoBsNeSODksNYyEkd2W2E252_c",
+  authDomain: "life--log.firebaseapp.com",
+  databaseURL: "https://life--log-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "life--log",
+  storageBucket: "life--log.firebasestorage.app",
+  messagingSenderId: "790653257684",
+  appId: "1:790653257684:web:dd84bf5e0a38db328f3841"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const tasksRef = db.ref('tasks');
-const statsRef = db.ref('stats');
+const auth = firebase.auth();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+const ALLOWED_EMAIL = 'sasaki0369@gmail.com';
+/* life--logは他アプリ（訪問録・飲みメモ・ささやきログ・noteろぐ）と共有のため、
+   このアプリ専用のパス taskGantt/ 配下にデータを保存し、衝突を避けています */
+const tasksRef = db.ref('taskGantt/tasks');
+const statsRef = db.ref('taskGantt/stats');
+
+function hideAuthOverlay(){
+  const el = document.getElementById('authLoadingOverlay');
+  if (el) el.style.display = 'none';
+}
+function showAuthMessage(emoji, text){
+  const el = document.getElementById('authLoadingOverlay');
+  if (el) {
+    el.style.display = 'flex';
+    el.innerHTML = `<div style="font-size:40px;">${emoji}</div><div style="font-weight:700; color:var(--ink);">${text}</div>`;
+  }
+}
+
+auth.onAuthStateChanged(user => {
+  if (user && user.email === ALLOWED_EMAIL) {
+    hideAuthOverlay();
+    attachFirebaseListeners();
+  } else if (user) {
+    showAuthMessage('🚫', 'このGoogleアカウントでは利用できません');
+    auth.signOut();
+  } else {
+    showAuthMessage('🔐', 'Googleアカウントでログインしています…');
+    auth.signInWithRedirect(googleProvider);
+  }
+});
 
 const RANK_COLOR = { A: '#E85D5D', B: '#F0A93E', C: '#4CAF87', D: '#6C8CB0', P: '#8B6FD1' };
 const RANK_BG    = { A: '#FDE7E7', B: '#FCF0DA', C: '#E3F5EC', D: '#E7EEF5', P: '#EDE7FA' };
@@ -616,18 +652,20 @@ let currentEditId = null;
 let currentActualId = null;
 let currentFilter = 'ALL';
 
-/* ---------- Firebase 同期 ---------- */
-tasksRef.on('value', snap => {
-  tasks = snap.val() || {};
-  renderList();
-  renderGantt();
-  scheduleNotifications();
-});
-statsRef.on('value', snap => {
-  const v = snap.val();
-  if (v) stats = Object.assign(stats, v);
-  renderStats();
-});
+/* ---------- Firebase 同期（Google認証後に開始） ---------- */
+function attachFirebaseListeners(){
+  tasksRef.on('value', snap => {
+    tasks = snap.val() || {};
+    renderList();
+    renderGantt();
+    scheduleNotifications();
+  });
+  statsRef.on('value', snap => {
+    const v = snap.val();
+    if (v) stats = Object.assign(stats, v);
+    renderStats();
+  });
+}
 
 function saveTask(id, data){
   tasksRef.child(id).set(data);
