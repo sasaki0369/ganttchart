@@ -592,7 +592,12 @@ auth.onAuthStateChanged(user => {
     auth.signOut();
   } else {
     showAuthMessage('🔐', 'Googleアカウントでログインしています…');
-    auth.signInWithRedirect(googleProvider);
+    // まずポップアップでログインを試み、ブロックされた場合のみリダイレクト方式にフォールバック
+    // （Chromeのサードパーティストレージ制限でリダイレクト方式だけだとログインループになるため）
+    auth.signInWithPopup(googleProvider).catch((err) => {
+      console.warn('signInWithPopup failed, falling back to redirect:', err && err.code);
+      auth.signInWithRedirect(googleProvider);
+    });
   }
 });
 
