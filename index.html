@@ -15,18 +15,23 @@
 
 <script>
 // PWA manifest をインラインで生成（1ファイル実装のため）
+const APP_ICON_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQyIiBmaWxsPSIjRkY5NDVBIi8+PHJlY3QgeD0iMzYiIHk9IjUwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2ZmZmZmZiIvPjxyZWN0IHg9IjM2IiB5PSI4NyIgd2lkdGg9IjgwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI0ZGRTRENSIvPjxyZWN0IHg9IjM2IiB5PSIxMjQiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTgiIHJ4PSI5IiBmaWxsPSIjRkZFNEQ1Ii8+PGNpcmNsZSBjeD0iMTQ4IiBjeT0iOTYiIHI9IjIwIiBmaWxsPSIjNENBRjg3Ii8+PHBhdGggZD0iTTEzOSA5NmwtNiA2IDE1IC0xNSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==";
 const manifest = {
+  id: "./index.html",
   name: "やることガントチャート",
   short_name: "やることガント",
+  description: "やることの予実管理ができるガントチャートアプリ",
   start_url: "./index.html",
+  scope: "./",
   display: "standalone",
   background_color: "#FFF8F0",
   theme_color: "#FF945A",
-  icons: [{
-    src: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQyIiBmaWxsPSIjRkY5NDVBIi8+PHJlY3QgeD0iMzYiIHk9IjUwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI2ZmZmZmZiIvPjxyZWN0IHg9IjM2IiB5PSI4NyIgd2lkdGg9IjgwIiBoZWlnaHQ9IjE4IiByeD0iOSIgZmlsbD0iI0ZGRTRENSIvPjxyZWN0IHg9IjM2IiB5PSIxMjQiIHdpZHRoPSIxMDAiIGhlaWdodD0iMTgiIHJ4PSI5IiBmaWxsPSIjRkZFNEQ1Ii8+PGNpcmNsZSBjeD0iMTQ4IiBjeT0iOTYiIHI9IjIwIiBmaWxsPSIjNENBRjg3Ii8+PHBhdGggZD0iTTEzOSA5NmwtNiA2IDE1IC0xNSIgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==",
-    sizes: "192x192",
-    type: "image/svg+xml"
-  }]
+  icons: [
+    { src: APP_ICON_SVG, sizes: "192x192", type: "image/svg+xml", purpose: "any" },
+    { src: APP_ICON_SVG, sizes: "512x512", type: "image/svg+xml", purpose: "any" },
+    { src: APP_ICON_SVG, sizes: "192x192", type: "image/svg+xml", purpose: "maskable" },
+    { src: APP_ICON_SVG, sizes: "512x512", type: "image/svg+xml", purpose: "maskable" }
+  ]
 };
 const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
 const manifestURL = URL.createObjectURL(manifestBlob);
@@ -310,6 +315,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
     <div class="level-chip">⭐ Lv.<span id="levelNum">1</span></div>
     <div class="streak-chip">🔥 <span id="streakNum">0</span>日連続</div>
     <button id="notifyBtn" class="streak-chip" style="border:none; cursor:pointer; font-family:inherit;">🔔</button>
+    <button id="installBtn" class="streak-chip" style="border:none; cursor:pointer; font-family:inherit; display:none;">📲 インストール</button>
   </div>
   <div class="xp-bar-wrap"><div class="xp-bar" id="xpBar" style="width:0%"></div></div>
   <div class="xp-label"><span id="xpText">0 / 100 XP</span></div>
@@ -813,6 +819,32 @@ function fallbackNotify(title, body){
   try { new Notification(title, { body }); } catch (e) { /* 通知生成に失敗した場合は無視 */ }
 }
 updateNotifyBtnLabel();
+
+/* ---------- アプリのインストール（Windows/Android/デスクトップ Chrome・Edge） ---------- */
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById('installBtn');
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+if (!isStandalone) {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    installBtn.style.display = 'inline-flex';
+  });
+}
+installBtn.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) {
+    alert('このブラウザでは自動インストールに対応していません。\n\n・Windows／Android の Chrome・Edge：アドレスバー右側の「インストール」アイコン、または右上メニュー「アプリ」→「このサイトをインストール」から\n・iPhone の Safari：共有ボタン →「ホーム画面に追加」から');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  installBtn.style.display = 'none';
+});
+window.addEventListener('appinstalled', () => {
+  installBtn.style.display = 'none';
+});
 
 /* ---------- タブ切替 ---------- */
 document.querySelectorAll('.tab-btn').forEach(btn => {
