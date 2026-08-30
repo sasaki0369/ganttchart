@@ -181,6 +181,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .task-row.row-undated{ background: #F5F1FC; border-radius:10px; margin-bottom:2px; }
 .task-row.row-overdue{ background: #FFF0EE; border-radius:10px; margin-bottom:2px; }
 .task-row.row-inprogress{ background: #FFF7E0; border-radius:10px; margin-bottom:2px; }
+.task-row.row-paused{ background: #E7EEF5; border-radius:10px; margin-bottom:2px; }
 .task-row.row-cancelled{ background: #F1F1F1; border-radius:10px; margin-bottom:2px; opacity:0.75; }
 .rank-badge{
   width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
@@ -202,6 +203,10 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 .icon-btn.start-btn{ background:#FFF0DC; color: var(--rankB); }
 .icon-btn.cancel-btn{ background:#F1F1F1; color:#8A7D72; }
 .icon-btn.resume-btn{ background:#E7EEF5; color: var(--rankD); }
+.icon-btn.pause-btn{ background:#FFF0DC; color: var(--rankB); }
+.icon-btn.resumework-btn{ background:#FFF0DC; color: var(--rankB); }
+.icon-btn.finish-btn{ background:#E3F5EC; color: var(--rankC); }
+.icon-btn.reset-btn{ background:#F1F1F1; color:#8A7D72; }
 .icon-btn.del-btn{ background:#FDE7E7; color: var(--rankA); }
 
 .fab{
@@ -1212,6 +1217,7 @@ document.getElementById('saveActualBtn').addEventListener('click', () => {
   const data = Object.assign({}, t, {
     actualStart: startDate.toISOString(),
     actualEnd: endDate.toISOString(),
+    workSegments: [{ start: startDate.toISOString(), end: endDate.toISOString() }],
     done: true
   });
   saveTask(id, data);
@@ -1227,15 +1233,96 @@ function deleteTask(id){
   if (confirm('このタスクを削除しますか？')) tasksRef.child(id).remove();
 }
 
-/* ---------- 今すぐ開始（実績開始時刻を現在時刻で記録） ---------- */
+/* ---------- 実行状態の判定・集計ヘルパー ---------- */
+function getTaskRunState(t){
+  if (t.done) return 'done';
+  if (t.cancelled) return 'cancelled';
+  const segs = t.workSegments || [];
+  if (segs.length === 0) return 'notstarted';
+  return segs[segs.length - 1].end ? 'paused' : 'running';
+}
+function computeElapsedMinutes(t){
+  const segs = t.workSegments || [];
+  const now = new Date();
+  let total = 0;
+  segs.forEach(seg => {
+    const start = new Date(seg.start);
+    const end = seg.end ? new Date(seg.end) : now;
+    total += (end - start) / 60000;
+  });
+  return Math.max(0, Math.round(total));
+}
+
+/* ---------- 今すぐ開始 ---------- */
 function startTaskNow(id){
   const t = tasks[id];
   if (!t) return;
-  const data = Object.assign({}, t, { actualStart: new Date().toISOString() });
+  const now = new Date().toISOString();
+  const data = Object.assign({}, t, {
+    actualStart: t.actualStart || now,
+    workSegments: [{ start: now, end: null }]
+  });
   saveTask(id, data);
 }
 
-/* ---------- 中止／中止取り消し（予定スケジュールは変更しない。完了率には未完了としてカウントされる） ---------- */
+/* ---------- 一時停止 ---------- */
+function pauseTaskNow(id){
+  const t = tasks[id];
+  if (!t || !t.workSegments || !t.workSegments.length) return;
+  const segs = t.workSegments.slice();
+  const last = segs.length - 1;
+  if (segs[last].end) return; // すでに停止済み
+  segs[last] = Object.assign({}, segs[last], { end: new Date().toISOString() });
+  saveTask(id, Object.assign({}, t, { workSegments: segs }));
+}
+
+/* ---------- 再開 ---------- */
+function resumeTaskNow(id){
+  const t = tasks[id];
+  if (!t) return;
+  const segs = (t.workSegments || []).slice();
+  segs.push({ start: new Date().toISOString(), end: null });
+  saveTask(id, Object.assign({}, t, { workSegments: segs }));
+}
+
+/* ---------- 終了（実績として確定） ---------- */
+function finishTaskNow(id){
+  const t = tasks[id];
+  if (!t) return;
+  const wasDone = t.done;
+  const now = new Date().toISOString();
+  const segs = (t.workSegments || []).slice();
+  if (segs.length && !segs[segs.length - 1].end) {
+    segs[segs.length - 1] = Object.assign({}, segs[segs.length - 1], { end: now });
+  }
+  const data = Object.assign({}, t, {
+    workSegments: segs,
+    actualStart: t.actualStart || (segs[0] ? segs[0].start : now),
+    actualEnd: now,
+    done: true
+  });
+  saveTask(id, data);
+  if (!wasDone) {
+    if (isAchievementRank(data.rank)) onTaskCompleted(t, data);
+    if (data.repeatEnabled) createNextRecurrence(data);
+  }
+}
+
+/* ---------- 開始後の中止：開始前の状態にリセット ---------- */
+function resetTaskStart(id){
+  const t = tasks[id];
+  if (!t) return;
+  if (!confirm('ここまでの実行記録を破棄して、開始前の状態に戻しますか？')) return;
+  const data = Object.assign({}, t, {
+    actualStart: null,
+    actualEnd: null,
+    workSegments: null,
+    done: false
+  });
+  saveTask(id, data);
+}
+
+/* ---------- 中止／中止取り消し（未着手タスク向け：予定スケジュールは変更しない。完了率には未完了としてカウントされる） ---------- */
 function setTaskCancelled(id, cancelled){
   const t = tasks[id];
   if (!t) return;
@@ -1419,24 +1506,59 @@ function renderList(){
 
     groups[key].forEach(([id, t]) => {
       const row = document.createElement('div');
-      const isOverdue = !t.done && !t.cancelled && (
+      const runState = getTaskRunState(t);
+      const isOverdue = runState === 'notstarted' && (
         (t.planEnd && new Date(t.planEnd) < now) ||
         (t.planDateOnly && new Date(t.planDateOnly + 'T23:59:59') < now)
       );
       const isUndated = !t.planStart && !t.planDateOnly;
-      const isInProgress = !t.done && !t.cancelled && !!t.actualStart;
-      row.className = 'task-row' + (isOverdue ? ' row-overdue' : '') + (isUndated ? ' row-undated' : '') + (isInProgress ? ' row-inprogress' : '') + (t.cancelled ? ' row-cancelled' : '');
+      row.className = 'task-row'
+        + (isOverdue ? ' row-overdue' : '')
+        + (isUndated ? ' row-undated' : '')
+        + (runState === 'running' ? ' row-inprogress' : '')
+        + (runState === 'paused' ? ' row-paused' : '')
+        + (runState === 'cancelled' ? ' row-cancelled' : '');
       let planTxt;
       if (t.planStart) planTxt = `${fmtTime(t.planStart)}〜${fmtTime(t.planEnd)}`;
       else if (t.planDateOnly) planTxt = `期日 ${fmtDateOnly(t.planDateOnly)}`;
       else planTxt = '日時未定';
-      const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}`
-        : (t.cancelled ? '🚫 中止' : (isInProgress ? `⏱ ${fmtTime(t.actualStart)}〜 実行中` : ''));
+      let actualTxt = '';
+      if (runState === 'done') actualTxt = `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}`;
+      else if (runState === 'cancelled') actualTxt = '🚫 中止';
+      else if (runState === 'running') actualTxt = `⏱ ${fmtTime(t.actualStart)}〜 実行中（累計${computeElapsedMinutes(t)}分）`;
+      else if (runState === 'paused') actualTxt = `⏸ 一時停止中（累計${computeElapsedMinutes(t)}分）`;
       const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
       const taskImages = t.images || (t.image ? [t.image] : []);
       const thumbHtml = taskImages.length
         ? `<div class="task-thumbs">${taskImages.map((src, i) => `<img src="${src}" class="task-thumb" data-idx="${i}" alt="添付画像${i+1}">`).join('')}</div>`
         : '';
+
+      let actionsHtml = '';
+      if (runState === 'notstarted') {
+        actionsHtml = `
+          <button class="icon-btn start-btn" title="今すぐ開始">▶</button>
+          <button class="icon-btn done-btn" title="実績記録">✓</button>
+          <button class="icon-btn cancel-btn" title="中止にする">✕</button>
+        `;
+      } else if (runState === 'running') {
+        actionsHtml = `
+          <button class="icon-btn pause-btn" title="一時停止">⏸</button>
+          <button class="icon-btn finish-btn" title="終了">⏹</button>
+          <button class="icon-btn reset-btn" title="中止（開始前に戻す）">✕</button>
+        `;
+      } else if (runState === 'paused') {
+        actionsHtml = `
+          <button class="icon-btn resumework-btn" title="再開">▶</button>
+          <button class="icon-btn finish-btn" title="終了">⏹</button>
+          <button class="icon-btn reset-btn" title="中止（開始前に戻す）">✕</button>
+        `;
+      } else if (runState === 'done') {
+        actionsHtml = `<button class="icon-btn done-btn" title="実績編集">📝</button>`;
+      } else if (runState === 'cancelled') {
+        actionsHtml = `<button class="icon-btn resume-btn" title="中止を取り消す">↩</button>`;
+      }
+      actionsHtml += `<button class="icon-btn del-btn" title="削除">🗑</button>`;
+
       row.innerHTML = `
         <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : (t.rank === 'D' ? '📝' : t.rank)}</div>
         <div class="task-main">
@@ -1445,24 +1567,25 @@ function renderList(){
           ${memoHtml}
           ${thumbHtml}
         </div>
-        <div class="task-actions">
-          ${(!t.done && !t.cancelled && !t.actualStart) ? `<button class="icon-btn start-btn" title="今すぐ開始">▶</button>` : ``}
-          ${(!t.done && !t.cancelled) ? `<button class="icon-btn done-btn" title="実績記録">✓</button>` : ``}
-          ${t.done ? `<button class="icon-btn done-btn" title="実績編集">📝</button>` : ``}
-          ${(!t.done && !t.cancelled) ? `<button class="icon-btn cancel-btn" title="中止にする">✕</button>` : ``}
-          ${(!t.done && t.cancelled) ? `<button class="icon-btn resume-btn" title="中止を取り消す">↩</button>` : ``}
-          <button class="icon-btn del-btn" title="削除">🗑</button>
-        </div>
+        <div class="task-actions">${actionsHtml}</div>
       `;
       const startBtn = row.querySelector('.start-btn');
       const doneBtn = row.querySelector('.done-btn');
       const cancelBtn = row.querySelector('.cancel-btn');
       const resumeBtn = row.querySelector('.resume-btn');
+      const pauseBtn = row.querySelector('.pause-btn');
+      const resumeworkBtn = row.querySelector('.resumework-btn');
+      const finishBtn = row.querySelector('.finish-btn');
+      const resetBtn = row.querySelector('.reset-btn');
       const delBtn = row.querySelector('.del-btn');
       if (startBtn) startBtn.addEventListener('click', (e) => { e.stopPropagation(); startTaskNow(id); });
       if (doneBtn) doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
       if (cancelBtn) cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); setTaskCancelled(id, true); });
       if (resumeBtn) resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); setTaskCancelled(id, false); });
+      if (pauseBtn) pauseBtn.addEventListener('click', (e) => { e.stopPropagation(); pauseTaskNow(id); });
+      if (resumeworkBtn) resumeworkBtn.addEventListener('click', (e) => { e.stopPropagation(); resumeTaskNow(id); });
+      if (finishBtn) finishBtn.addEventListener('click', (e) => { e.stopPropagation(); finishTaskNow(id); });
+      if (resetBtn) resetBtn.addEventListener('click', (e) => { e.stopPropagation(); resetTaskStart(id); });
       row.querySelectorAll('.task-thumb').forEach(thumbEl => {
         thumbEl.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -1591,7 +1714,8 @@ function renderGantt(){
   const dayTasks = Object.entries(tasks).filter(([id, t]) => {
     const planDateKey = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly ? t.planDateOnly : null);
     const actualDateKey = t.actualStart ? toLocalDateStr(new Date(t.actualStart)) : null;
-    return planDateKey === targetDate || actualDateKey === targetDate;
+    const hasSegOnDate = (t.workSegments || []).some(seg => toLocalDateStr(new Date(seg.start)) === targetDate);
+    return planDateKey === targetDate || actualDateKey === targetDate || hasSegOnDate;
   }).sort((a,b) => (a[1].planStart||'').localeCompare(b[1].planStart||''));
 
   document.getElementById('ganttEmptyHint').style.display = dayTasks.length ? 'none' : 'block';
@@ -1625,8 +1749,21 @@ function renderGantt(){
         planBarHtml = `<div class="bar bar-plan" style="left:0%;width:100%;border-color:${color};"></div>`;
       }
     }
+
     let actualBarHtml = '';
-    if (actualDateKey === targetDate && t.actualStart && t.actualEnd){
+    if (t.workSegments && t.workSegments.length) {
+      // 開始・一時停止・再開・終了で記録した複数の実行区間をそれぞれ表示
+      const nowIso = new Date().toISOString();
+      actualBarHtml = t.workSegments
+        .filter(seg => toLocalDateStr(new Date(seg.start)) === targetDate)
+        .map(seg => {
+          const segEnd = seg.end || nowIso;
+          const left = pctOfDay(seg.start);
+          const width = Math.max(1, pctOfDay(segEnd) - left);
+          return `<div class="bar actual" style="left:${left}%;width:${width}%;background:${color};"></div>`;
+        }).join('');
+    } else if (actualDateKey === targetDate && t.actualStart && t.actualEnd){
+      // 旧データ（区間記録なしで直接実績を記録したタスク）との互換表示
       const left = pctOfDay(t.actualStart);
       const width = Math.max(1, pctOfDay(t.actualEnd) - left);
       actualBarHtml = `<div class="bar actual" style="left:${left}%;width:${width}%;background:${color};"></div>`;
