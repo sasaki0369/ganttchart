@@ -262,9 +262,17 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 }
 .image-paste-area:focus{ border-color: var(--accent); background: var(--accent-soft); }
 .image-paste-area #imagePastePlaceholder{ font-size:12.5px; color: var(--ink-soft); }
-.image-paste-area img{ max-width:100%; max-height:220px; border-radius:10px; display:block; margin:0 auto 8px; }
+.image-gallery{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; justify-content:center; }
+.image-gallery-item{ position:relative; width:80px; height:80px; }
+.image-gallery-item img{ width:100%; height:100%; object-fit:cover; border-radius:10px; border:1px solid var(--line); display:block; }
+.image-gallery-item .img-remove-btn{
+  position:absolute; top:-6px; right:-6px; width:22px; height:22px; border-radius:50%;
+  background: var(--rankA); color:#fff; border:2px solid #fff; font-size:12px; line-height:1;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+}
 
-.task-thumb{ width:56px; height:56px; object-fit:cover; border-radius:10px; margin-top:6px; cursor:pointer; border:1px solid var(--line); }
+.task-thumbs{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.task-thumb{ width:56px; height:56px; object-fit:cover; border-radius:10px; cursor:pointer; border:1px solid var(--line); }
 
 .overlay.image-lightbox{ align-items:center; padding:20px; }
 .overlay.image-lightbox img{ max-width:92vw; max-height:88vh; border-radius:12px; }
@@ -520,13 +528,10 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
       <textarea id="inputMemo" rows="2" placeholder="補足事項があれば"></textarea>
     </div>
     <div class="field">
-      <label>画像（任意）</label>
+      <label>画像（任意・複数貼り付け可）</label>
       <div class="image-paste-area" id="imagePasteArea" tabindex="0">
         <div id="imagePastePlaceholder">📋 ここをタップしてから貼り付け（Ctrl+V / スマホは長押し→ペースト）</div>
-        <div id="imagePreviewWrap" style="display:none;">
-          <img id="imagePreview" src="" alt="添付画像">
-          <button type="button" class="duration-reset" id="imageRemoveBtn">画像を削除</button>
-        </div>
+        <div class="image-gallery" id="imageGallery"></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -913,7 +918,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.getElementById('modalTitle').textContent = 'やることを追加';
   document.getElementById('inputName').value = '';
   document.getElementById('inputMemo').value = '';
-  clearImagePreview();
+  clearImageGallery();
   document.getElementById('inputDueDate').value = '';
   document.getElementById('inputRepeatStartTime').value = '';
   setDurationMinutes('inputRepeatDuration', 'repeatDurationTotalDisplay', 60);
@@ -932,23 +937,32 @@ document.getElementById('fabAdd').addEventListener('click', () => {
 });
 document.getElementById('cancelTaskBtn').addEventListener('click', () => taskOverlay.classList.remove('show'));
 
-/* ---------- 画像添付（クリップボード貼り付け） ---------- */
-let pendingImageData = null;
+/* ---------- 画像添付（クリップボード貼り付け・複数可） ---------- */
+let pendingImages = [];
 const imagePasteArea = document.getElementById('imagePasteArea');
 const imagePastePlaceholder = document.getElementById('imagePastePlaceholder');
-const imagePreviewWrap = document.getElementById('imagePreviewWrap');
-const imagePreview = document.getElementById('imagePreview');
+const imageGallery = document.getElementById('imageGallery');
 
-function showImagePreview(dataUrl){
-  imagePastePlaceholder.style.display = 'none';
-  imagePreviewWrap.style.display = 'block';
-  imagePreview.src = dataUrl;
+function renderImageGallery(){
+  imagePastePlaceholder.style.display = pendingImages.length ? 'none' : 'block';
+  imageGallery.innerHTML = '';
+  pendingImages.forEach((dataUrl, idx) => {
+    const item = document.createElement('div');
+    item.className = 'image-gallery-item';
+    item.innerHTML = `<img src="${dataUrl}" alt="添付画像${idx+1}"><button type="button" class="img-remove-btn" data-idx="${idx}">✕</button>`;
+    imageGallery.appendChild(item);
+  });
+  imageGallery.querySelectorAll('.img-remove-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pendingImages.splice(parseInt(btn.dataset.idx, 10), 1);
+      renderImageGallery();
+    });
+  });
 }
-function clearImagePreview(){
-  pendingImageData = null;
-  imagePastePlaceholder.style.display = 'block';
-  imagePreviewWrap.style.display = 'none';
-  imagePreview.src = '';
+function clearImageGallery(){
+  pendingImages = [];
+  renderImageGallery();
 }
 function resizeAndStoreImage(file){
   if (!file) return;
@@ -964,8 +978,8 @@ function resizeAndStoreImage(file){
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
-      pendingImageData = dataUrl;
-      showImagePreview(dataUrl);
+      pendingImages.push(dataUrl);
+      renderImageGallery();
     };
     img.src = ev.target.result;
   };
@@ -975,17 +989,14 @@ document.addEventListener('paste', (e) => {
   if (!taskOverlay.classList.contains('show')) return;
   const items = (e.clipboardData || window.clipboardData) ? (e.clipboardData || window.clipboardData).items : null;
   if (!items) return;
+  let handled = false;
   for (const item of items) {
     if (item.type && item.type.startsWith('image/')) {
       resizeAndStoreImage(item.getAsFile());
-      e.preventDefault();
-      break;
+      handled = true;
     }
   }
-});
-document.getElementById('imageRemoveBtn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  clearImagePreview();
+  if (handled) e.preventDefault();
 });
 
 /* ---------- 画像の拡大表示（ライトボックス） ---------- */
@@ -1109,7 +1120,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const data = Object.assign({}, existing, {
     name, rank, category,
     memo,
-    image: pendingImageData || null,
+    images: pendingImages.length ? pendingImages.slice() : null,
     repeatEnabled,
     repeatWeekday: weekday,
     repeatStartTime: isRepeatTimeMode ? repeatStartTime : null,
@@ -1248,7 +1259,7 @@ function createNextRecurrence(completedTask){
     rank: completedTask.rank,
     category: completedTask.category,
     memo: completedTask.memo || '',
-    image: completedTask.image || null,
+    images: completedTask.images || null,
     repeatEnabled: true,
     repeatWeekday: completedTask.repeatWeekday,
     repeatStartTime: completedTask.repeatStartTime || null,
@@ -1422,7 +1433,10 @@ function renderList(){
       const actualTxt = t.done ? `実績 ${fmtTime(t.actualStart)}〜${fmtTime(t.actualEnd)}`
         : (t.cancelled ? '🚫 中止' : (isInProgress ? `⏱ ${fmtTime(t.actualStart)}〜 実行中` : ''));
       const memoHtml = t.memo ? `<div class="task-memo">${linkifyMemo(t.memo)}</div>` : '';
-      const thumbHtml = t.image ? `<img src="${t.image}" class="task-thumb" alt="添付画像">` : '';
+      const taskImages = t.images || (t.image ? [t.image] : []);
+      const thumbHtml = taskImages.length
+        ? `<div class="task-thumbs">${taskImages.map((src, i) => `<img src="${src}" class="task-thumb" data-idx="${i}" alt="添付画像${i+1}">`).join('')}</div>`
+        : '';
       row.innerHTML = `
         <div class="rank-badge" style="background:${RANK_BG[t.rank]};color:${RANK_COLOR[t.rank]}">${t.rank === 'P' ? '🏠' : (t.rank === 'D' ? '📝' : t.rank)}</div>
         <div class="task-main">
@@ -1445,12 +1459,16 @@ function renderList(){
       const cancelBtn = row.querySelector('.cancel-btn');
       const resumeBtn = row.querySelector('.resume-btn');
       const delBtn = row.querySelector('.del-btn');
-      const thumbEl = row.querySelector('.task-thumb');
       if (startBtn) startBtn.addEventListener('click', (e) => { e.stopPropagation(); startTaskNow(id); });
       if (doneBtn) doneBtn.addEventListener('click', (e) => { e.stopPropagation(); openActualModal(id); });
       if (cancelBtn) cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); setTaskCancelled(id, true); });
       if (resumeBtn) resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); setTaskCancelled(id, false); });
-      if (thumbEl) thumbEl.addEventListener('click', (e) => { e.stopPropagation(); openImageLightbox(t.image); });
+      row.querySelectorAll('.task-thumb').forEach(thumbEl => {
+        thumbEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openImageLightbox(taskImages[parseInt(thumbEl.dataset.idx, 10)]);
+        });
+      });
       delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(id); });
       row.addEventListener('click', () => { currentEditId = id; openEditModal(t); });
       list.appendChild(row);
@@ -1507,12 +1525,8 @@ function openEditModal(t){
   document.getElementById('modalTitle').textContent = 'やることを編集';
   document.getElementById('inputName').value = t.name;
   document.getElementById('inputMemo').value = t.memo || '';
-  if (t.image) {
-    pendingImageData = t.image;
-    showImagePreview(t.image);
-  } else {
-    clearImagePreview();
-  }
+  pendingImages = (t.images || (t.image ? [t.image] : [])).slice();
+  renderImageGallery();
   setCategory(t.category || (t.rank === 'P' ? 'private' : 'work'));
   document.querySelectorAll('#rankSelect label').forEach(l => {
     const active = l.dataset.rank === t.rank;
