@@ -516,6 +516,12 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         🔁 繰り返し（毎週）
       </label>
     </div>
+    <div class="field">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="inputAlarmEnabled" style="width:auto;" checked>
+        🔔 アラームメモに通知（開始5分前 / 期日のみの場合は当日7時）
+      </label>
+    </div>
     <div class="field" id="repeatWeekdayRow" style="display:none;">
       <label>曜日を選択（完了すると翌週の同じ曜日で自動的に再登録されます）</label>
       <div class="weekday-select" id="weekdaySelect">
@@ -719,6 +725,46 @@ function attachFirebaseListeners(){
 
 function saveTask(id, data){
   tasksRef.child(id).set(data);
+  syncAlarmForTask(id, data);
+}
+
+/* ---------- アラームメモ連携 ----------
+   同じ life--log プロジェクトの alarmMemo ノードに書き込むことで、
+   Androidアプリ（アラームメモ）側でロック中でも通知・振動させる。
+   キーは "gantt_<タスクID>" で固定し、タスクの更新・削除・完了・
+   アラームOFFに応じて上書き／削除する。 */
+const alarmMemoRef = db.ref('alarmMemo');
+
+function syncAlarmForTask(taskId, data){
+  const alarmKey = 'gantt_' + taskId;
+
+  if (data.done || data.cancelled || data.alarmEnabled === false) {
+    alarmMemoRef.child(alarmKey).remove();
+    return;
+  }
+
+  let targetMs = null;
+  if (data.planStart) {
+    // 開始時刻の5分前
+    targetMs = new Date(data.planStart).getTime() - 5 * 60000;
+  } else if (data.planDateOnly) {
+    // 時刻未指定（期日のみ）の場合は当日7時
+    targetMs = new Date(`${data.planDateOnly}T07:00:00`).getTime();
+  }
+
+  if (!targetMs || isNaN(targetMs) || targetMs <= Date.now()) {
+    // 日時が無い、または既に過去の時刻になった場合はアラームを解除する
+    alarmMemoRef.child(alarmKey).remove();
+    return;
+  }
+
+  alarmMemoRef.child(alarmKey).set({
+    id: alarmKey,
+    content: data.name || 'やること',
+    datetime: targetMs,
+    createdAt: data.createdAt ? new Date(data.createdAt).getTime() : Date.now(),
+    imageBase64: ''
+  });
 }
 function saveStats(){
   statsRef.set(stats);
@@ -931,6 +977,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   document.querySelectorAll('#rankSelect label').forEach(l => l.classList.remove('active'));
   setCategory('work');
   document.getElementById('inputRepeatEnabled').checked = false;
+  document.getElementById('inputAlarmEnabled').checked = true;
   document.getElementById('repeatWeekdayRow').style.display = 'none';
   document.querySelectorAll('#weekdaySelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
@@ -1107,6 +1154,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const repeatDurationMin = parseInt(document.getElementById('inputRepeatDuration').value, 10);
   const memo = document.getElementById('inputMemo').value.trim();
   const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
+  const alarmEnabled = document.getElementById('inputAlarmEnabled').checked;
   const weekdayInput = document.querySelector('#weekdaySelect input:checked');
   const isRepeatTimeMode = (dateMode === 'time' && repeatEnabled);
 
@@ -1127,6 +1175,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     memo,
     images: pendingImages.length ? pendingImages.slice() : null,
     repeatEnabled,
+    alarmEnabled,
     repeatWeekday: weekday,
     repeatStartTime: isRepeatTimeMode ? repeatStartTime : null,
     done: existing.done || false,
@@ -1230,7 +1279,10 @@ document.getElementById('saveActualBtn').addEventListener('click', () => {
 
 /* ---------- タスク削除 ---------- */
 function deleteTask(id){
-  if (confirm('このタスクを削除しますか？')) tasksRef.child(id).remove();
+  if (confirm('このタスクを削除しますか？')) {
+    tasksRef.child(id).remove();
+    alarmMemoRef.child('gantt_' + id).remove();
+  }
 }
 
 /* ---------- 実行状態の判定・集計ヘルパー ---------- */
@@ -1659,6 +1711,7 @@ function openEditModal(t){
 
   const repeatEnabled = !!t.repeatEnabled;
   document.getElementById('inputRepeatEnabled').checked = repeatEnabled;
+  document.getElementById('inputAlarmEnabled').checked = (t.alarmEnabled !== false);
   document.getElementById('repeatWeekdayRow').style.display = repeatEnabled ? 'block' : 'none';
   document.querySelectorAll('#weekdaySelect label').forEach(l => {
     const active = repeatEnabled && parseInt(l.dataset.day, 10) === t.repeatWeekday;
