@@ -1378,6 +1378,7 @@ function resetTaskStart(id){
 function setTaskCancelled(id, cancelled){
   const t = tasks[id];
   if (!t) return;
+  if (cancelled && !confirm('このタスクを中止にしますか？（予定はそのまま残り、完了率には未完了としてカウントされます）')) return;
   const data = Object.assign({}, t, { cancelled });
   saveTask(id, data);
   if (cancelled && data.repeatEnabled) {
@@ -1399,6 +1400,7 @@ function createNextRecurrence(completedTask){
     category: completedTask.category,
     memo: completedTask.memo || '',
     images: completedTask.images || null,
+    alarmEnabled: completedTask.alarmEnabled,
     repeatEnabled: true,
     repeatWeekday: completedTask.repeatWeekday,
     repeatStartTime: completedTask.repeatStartTime || null,
