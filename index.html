@@ -513,7 +513,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
     <div class="field">
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
         <input type="checkbox" id="inputRepeatEnabled" style="width:auto;">
-        🔁 繰り返し（毎週）
+        🔁 繰り返し
       </label>
     </div>
     <div class="field">
@@ -521,6 +521,13 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
         <input type="checkbox" id="inputAlarmEnabled" style="width:auto;" checked>
         🔔 アラームメモに通知（開始5分前 / 期日のみの場合は当日7時）
       </label>
+    </div>
+    <div class="field" id="repeatFrequencyRow" style="display:none;">
+      <label>繰り返しの頻度</label>
+      <div class="weekday-select" id="repeatFrequencySelect" style="max-width:240px;">
+        <label data-freq="daily"><input type="radio" name="repeatFrequency" value="daily"><span class="opt">毎日</span></label>
+        <label data-freq="weekly"><input type="radio" name="repeatFrequency" value="weekly"><span class="opt">毎週</span></label>
+      </div>
     </div>
     <div class="field" id="repeatWeekdayRow" style="display:none;">
       <label>曜日を選択（完了すると翌週の同じ曜日で自動的に再登録されます）</label>
@@ -978,6 +985,11 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   setCategory('work');
   document.getElementById('inputRepeatEnabled').checked = false;
   document.getElementById('inputAlarmEnabled').checked = true;
+  document.querySelectorAll('#repeatFrequencySelect label').forEach(l => l.classList.remove('active'));
+  document.querySelectorAll('#repeatFrequencySelect input').forEach(r => r.checked = false);
+  document.querySelector('#repeatFrequencySelect label[data-freq="weekly"]').classList.add('active');
+  document.querySelector('#repeatFrequencySelect input[value="weekly"]').checked = true;
+  document.getElementById('repeatFrequencyRow').style.display = 'none';
   document.getElementById('repeatWeekdayRow').style.display = 'none';
   document.querySelectorAll('#weekdaySelect input').forEach(r => r.checked = false);
   document.querySelectorAll('#weekdaySelect label').forEach(l => l.classList.remove('active'));
@@ -1088,10 +1100,32 @@ document.querySelectorAll('#dateModeSelect label').forEach(label => {
   label.addEventListener('click', () => setDateMode(label.dataset.mode));
 });
 
-/* 繰り返し（毎週）トグル */
-document.getElementById('inputRepeatEnabled').addEventListener('change', (e) => {
-  document.getElementById('repeatWeekdayRow').style.display = e.target.checked ? 'block' : 'none';
+/* 繰り返しトグル・頻度（毎日／毎週）に応じた表示切り替え */
+function updateRepeatFieldsVisibility(){
+  const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
+  const freqInput = document.querySelector('#repeatFrequencySelect input:checked');
+  const freq = freqInput ? freqInput.value : 'weekly';
+  document.getElementById('repeatFrequencyRow').style.display = repeatEnabled ? 'block' : 'none';
+  document.getElementById('repeatWeekdayRow').style.display = (repeatEnabled && freq === 'weekly') ? 'block' : 'none';
+}
+document.getElementById('inputRepeatEnabled').addEventListener('change', () => {
+  updateRepeatFieldsVisibility();
   updateDateFieldsVisibility();
+});
+document.querySelectorAll('#repeatFrequencySelect label').forEach(label => {
+  label.addEventListener('click', () => {
+    document.querySelectorAll('#repeatFrequencySelect label').forEach(l => l.classList.remove('active'));
+    label.classList.add('active');
+    label.querySelector('input').checked = true;
+    updateRepeatFieldsVisibility();
+    if (label.dataset.freq === 'daily') {
+      const dateModeInput = document.querySelector('#dateModeSelect input:checked');
+      if (dateModeInput && dateModeInput.value === 'date') {
+        const dueDateInput = document.getElementById('inputDueDate');
+        if (!dueDateInput.value) dueDateInput.value = todayStr();
+      }
+    }
+  });
 });
 
 /* 曜日を取得するヘルパー：指定曜日の直近の日付（今日を含む）を返す */
@@ -1155,26 +1189,29 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const memo = document.getElementById('inputMemo').value.trim();
   const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
   const alarmEnabled = document.getElementById('inputAlarmEnabled').checked;
+  const freqInput = document.querySelector('#repeatFrequencySelect input:checked');
+  const repeatFrequency = freqInput ? freqInput.value : 'weekly';
   const weekdayInput = document.querySelector('#weekdaySelect input:checked');
   const isRepeatTimeMode = (dateMode === 'time' && repeatEnabled);
 
   if (!name){ alert('タスク名を入力してください'); return; }
   if (category === 'work' && !rankInput){ alert('優先順位を選択してください'); return; }
   if (dateMode === 'date' && !dueDate){ alert('期日を選択してください'); return; }
-  if (repeatEnabled && !weekdayInput){ alert('繰り返しの曜日を選択してください'); return; }
+  if (repeatEnabled && repeatFrequency === 'weekly' && !weekdayInput){ alert('繰り返しの曜日を選択してください'); return; }
   if (isRepeatTimeMode && !repeatStartTime){ alert('開始時刻を入力してください'); return; }
 
   const rank = category === 'private' ? 'P' : rankInput.value;
   const isNewTask = !currentEditId;
   const id = currentEditId || uid();
   const existing = tasks[id] || {};
-  const weekday = repeatEnabled ? parseInt(weekdayInput.value, 10) : null;
+  const weekday = (repeatEnabled && repeatFrequency === 'weekly') ? parseInt(weekdayInput.value, 10) : null;
 
   const data = Object.assign({}, existing, {
     name, rank, category,
     memo,
     images: pendingImages.length ? pendingImages.slice() : null,
     repeatEnabled,
+    repeatFrequency: repeatEnabled ? repeatFrequency : null,
     alarmEnabled,
     repeatWeekday: weekday,
     repeatStartTime: isRepeatTimeMode ? repeatStartTime : null,
@@ -1185,9 +1222,11 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   });
 
   if (isRepeatTimeMode) {
-    // 繰り返し×時刻指定：日付は選択した曜日から自動算出し、時刻＋所要時間を反映
+    // 繰り返し×時刻指定：日付は頻度に応じて自動算出し、時刻＋所要時間を反映
     let occurrenceDateStr;
-    if (existing.planStart) {
+    if (repeatFrequency === 'daily') {
+      occurrenceDateStr = existing.planStart ? toLocalDateStr(new Date(existing.planStart)) : todayStr();
+    } else if (existing.planStart) {
       const existingDateStr = toLocalDateStr(new Date(existing.planStart));
       const existingWeekday = new Date(existingDateStr + 'T00:00:00').getDay();
       occurrenceDateStr = (existingWeekday === weekday) ? existingDateStr : getNextWeekdayDate(weekday);
@@ -1386,12 +1425,14 @@ function setTaskCancelled(id, cancelled){
   }
 }
 
-/* ---------- 繰り返しスケジュール：完了時に翌週分を自動登録 ---------- */
+/* ---------- 繰り返しスケジュール：完了時に次回分を自動登録（毎日／毎週） ---------- */
 function createNextRecurrence(completedTask){
   const hasTimeRepeat = !!(completedTask.repeatStartTime && completedTask.repeatEndTime);
+  const frequency = completedTask.repeatFrequency || 'weekly'; // 未設定の既存データは毎週として扱う
+  const intervalDays = frequency === 'daily' ? 1 : 7;
   const baseDateStr = completedTask.planDateOnly || (completedTask.planStart ? toLocalDateStr(new Date(completedTask.planStart)) : todayStr());
   const base = new Date(baseDateStr + 'T00:00:00');
-  const next = new Date(base.getTime() + 7*24*60*60*1000);
+  const next = new Date(base.getTime() + intervalDays*24*60*60*1000);
   const nextDateStr = toLocalDateStr(next);
   const newId = uid();
   const newTask = {
@@ -1402,6 +1443,7 @@ function createNextRecurrence(completedTask){
     images: completedTask.images || null,
     alarmEnabled: completedTask.alarmEnabled,
     repeatEnabled: true,
+    repeatFrequency: frequency,
     repeatWeekday: completedTask.repeatWeekday,
     repeatStartTime: completedTask.repeatStartTime || null,
     repeatEndTime: completedTask.repeatEndTime || null,
@@ -1712,9 +1754,15 @@ function openEditModal(t){
   });
 
   const repeatEnabled = !!t.repeatEnabled;
+  const repeatFrequency = t.repeatFrequency || 'weekly';
   document.getElementById('inputRepeatEnabled').checked = repeatEnabled;
   document.getElementById('inputAlarmEnabled').checked = (t.alarmEnabled !== false);
-  document.getElementById('repeatWeekdayRow').style.display = repeatEnabled ? 'block' : 'none';
+  document.querySelectorAll('#repeatFrequencySelect label').forEach(l => {
+    const active = l.dataset.freq === repeatFrequency;
+    l.classList.toggle('active', active);
+    l.querySelector('input').checked = active;
+  });
+  updateRepeatFieldsVisibility();
   document.querySelectorAll('#weekdaySelect label').forEach(l => {
     const active = repeatEnabled && parseInt(l.dataset.day, 10) === t.repeatWeekday;
     l.classList.toggle('active', active);
