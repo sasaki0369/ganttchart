@@ -1359,6 +1359,7 @@ function computeElapsedMinutes(t){
 
 /* ---------- 今すぐ開始 ---------- */
 function startTaskNow(id){
+  startSystemIdleDetector(true); // 初回のみ許可を求める（クリック操作内で呼ぶ必要あり）
   const t = tasks[id];
   if (!t) return;
   const now = new Date().toISOString();
@@ -1382,6 +1383,7 @@ function pauseTaskNow(id, endIso){
 
 /* ---------- 再開 ---------- */
 function resumeTaskNow(id){
+  startSystemIdleDetector(true);
   const t = tasks[id];
   if (!t) return;
   const segs = (t.workSegments || []).slice();
@@ -1926,10 +1928,15 @@ function fireConfetti(){
   tick();
 }
 
-/* ---------- 無操作で自動一時停止（PC向け：1分以上操作がない場合） ---------- */
+/* ---------- 無操作で自動一時停止（PC向け：1分以上操作がない場合） ----------
+   優先：Idle Detection API（Chrome/Edge）でパソコン全体の無操作・画面ロックを検知
+   代替：非対応・未許可の場合のみ、このアプリ画面内の操作で判定 */
 const IDLE_LIMIT_MS = 60 * 1000;
 let lastActivityAt = Date.now();
 let idlePausedIds = [];
+let systemIdleActive = false;      // パソコン全体の無操作検知が動作中か
+let idleDetectorStarting = false;
+let idlePermissionNotified = false;
 const idlePauseOverlay = document.getElementById('idlePauseOverlay');
 const idlePauseList = document.getElementById('idlePauseList');
 
@@ -1944,15 +1951,14 @@ function renderIdlePauseList(){
     .join('<br>');
 }
 
-function checkIdlePause(){
-  if (!isPcLikeDevice()) return;
-  if (Date.now() - lastActivityAt < IDLE_LIMIT_MS) return;
+/* 実行中タスクを一時停止し、ポップアップを表示（idleStartMs＝無操作が始まった時刻） */
+function autoPauseRunningTasks(idleStartMs){
   let pausedAny = false;
   Object.entries(tasks).forEach(([id, t]) => {
     if (getTaskRunState(t) !== 'running') return;
     const segStart = new Date(t.workSegments[t.workSegments.length - 1].start).getTime();
-    // 無操作の時間は実働に含めないよう、最後に操作した時刻で一時停止（開始時刻より前にはしない）
-    const endMs = Math.max(lastActivityAt, segStart);
+    // 無操作の時間は実働に含めないよう、無操作開始時刻で一時停止（開始時刻より前にはしない）
+    const endMs = Math.max(idleStartMs, segStart);
     pauseTaskNow(id, new Date(endMs).toISOString());
     if (!idlePausedIds.includes(id)) idlePausedIds.push(id);
     pausedAny = true;
@@ -1963,6 +1969,13 @@ function checkIdlePause(){
   }
 }
 
+/* 代替判定：このアプリ画面内の操作のみで判定（システム検知が動いている間は無効） */
+function checkIdlePause(){
+  if (systemIdleActive) return;
+  if (!isPcLikeDevice()) return;
+  if (Date.now() - lastActivityAt < IDLE_LIMIT_MS) return;
+  autoPauseRunningTasks(lastActivityAt);
+}
 function markActivity(){
   const now = Date.now();
   // スリープ復帰などで長時間経過していた場合は、最終操作時刻を更新する前に判定する
@@ -1973,6 +1986,44 @@ function markActivity(){
   document.addEventListener(evt, markActivity, { capture: true, passive: true });
 });
 setInterval(checkIdlePause, 10 * 1000);
+
+/* パソコン全体の無操作検知（Idle Detection API）。許可の要求はクリック等の操作内で行う必要がある */
+async function startSystemIdleDetector(fromGesture){
+  if (systemIdleActive || idleDetectorStarting) return;
+  if (!('IdleDetector' in window) || !isPcLikeDevice()) return;
+  idleDetectorStarting = true;
+  try {
+    if (fromGesture) {
+      const perm = await IdleDetector.requestPermission();
+      if (perm !== 'granted') {
+        if (!idlePermissionNotified) {
+          idlePermissionNotified = true;
+          alert('パソコン全体の操作検知が許可されませんでした。\nこのアプリ画面内の操作のみで、1分以上操作がない場合の自動一時停止を判定します。\n（ブラウザのサイト設定で「アクティビティの検出（アイドル検出）」を許可すると、パソコン全体の操作で判定できます）');
+        }
+        return;
+      }
+    } else {
+      // ページ読み込み時の自動開始は、すでに許可済みの場合のみ
+      const st = await navigator.permissions.query({ name: 'idle-detection' });
+      if (st.state !== 'granted') return;
+    }
+    const detector = new IdleDetector();
+    detector.addEventListener('change', () => {
+      const locked = detector.screenState === 'locked';
+      if (detector.userState === 'idle' || locked) {
+        // 画面ロックは即時、それ以外は検知しきい値（1分）ぶん遡った時刻を無操作の開始とする
+        autoPauseRunningTasks(locked ? Date.now() : Date.now() - IDLE_LIMIT_MS);
+      }
+    });
+    await detector.start({ threshold: IDLE_LIMIT_MS });
+    systemIdleActive = true;
+  } catch (e) {
+    console.warn('Idle Detectionを開始できませんでした。アプリ内操作で代替判定します:', e);
+  } finally {
+    idleDetectorStarting = false;
+  }
+}
+startSystemIdleDetector(false);
 
 document.getElementById('idlePauseResumeBtn').addEventListener('click', () => {
   idlePausedIds.forEach(id => {
