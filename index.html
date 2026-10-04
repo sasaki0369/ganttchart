@@ -593,6 +593,19 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
 
 <canvas class="confetti-canvas" id="confettiCanvas" style="display:none;"></canvas>
 
+<div class="overlay" id="idlePauseOverlay">
+  <div class="modal" style="text-align:center;">
+    <div style="font-size:40px;">⏸</div>
+    <h2 style="margin:6px 0 10px;">一時停止しました</h2>
+    <div style="font-size:13px; color:var(--ink-soft); margin-bottom:10px;">1分以上操作がなかったため、実行中のタスクを自動で一時停止しました。</div>
+    <div id="idlePauseList" style="font-weight:700; margin-bottom:14px; word-break:break-all;"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="idlePauseCloseBtn">一時停止のまま</button>
+      <button class="btn primary" id="idlePauseResumeBtn">▶ 再開する</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay image-lightbox" id="imageLightbox">
   <img id="imageLightboxImg" src="" alt="拡大画像">
 </div>
@@ -1357,13 +1370,13 @@ function startTaskNow(id){
 }
 
 /* ---------- 一時停止 ---------- */
-function pauseTaskNow(id){
+function pauseTaskNow(id, endIso){
   const t = tasks[id];
   if (!t || !t.workSegments || !t.workSegments.length) return;
   const segs = t.workSegments.slice();
   const last = segs.length - 1;
   if (segs[last].end) return; // すでに停止済み
-  segs[last] = Object.assign({}, segs[last], { end: new Date().toISOString() });
+  segs[last] = Object.assign({}, segs[last], { end: endIso || new Date().toISOString() });
   saveTask(id, Object.assign({}, t, { workSegments: segs }));
 }
 
@@ -1912,6 +1925,66 @@ function fireConfetti(){
   }
   tick();
 }
+
+/* ---------- 無操作で自動一時停止（PC向け：1分以上操作がない場合） ---------- */
+const IDLE_LIMIT_MS = 60 * 1000;
+let lastActivityAt = Date.now();
+let idlePausedIds = [];
+const idlePauseOverlay = document.getElementById('idlePauseOverlay');
+const idlePauseList = document.getElementById('idlePauseList');
+
+function isPcLikeDevice(){
+  return window.matchMedia('(pointer: fine)').matches; // マウス等の精密ポインタがある端末（PC）のみ対象
+}
+
+function renderIdlePauseList(){
+  idlePauseList.innerHTML = idlePausedIds
+    .filter(id => tasks[id])
+    .map(id => `・${escapeHtml(tasks[id].name)}`)
+    .join('<br>');
+}
+
+function checkIdlePause(){
+  if (!isPcLikeDevice()) return;
+  if (Date.now() - lastActivityAt < IDLE_LIMIT_MS) return;
+  let pausedAny = false;
+  Object.entries(tasks).forEach(([id, t]) => {
+    if (getTaskRunState(t) !== 'running') return;
+    const segStart = new Date(t.workSegments[t.workSegments.length - 1].start).getTime();
+    // 無操作の時間は実働に含めないよう、最後に操作した時刻で一時停止（開始時刻より前にはしない）
+    const endMs = Math.max(lastActivityAt, segStart);
+    pauseTaskNow(id, new Date(endMs).toISOString());
+    if (!idlePausedIds.includes(id)) idlePausedIds.push(id);
+    pausedAny = true;
+  });
+  if (pausedAny) {
+    renderIdlePauseList();
+    idlePauseOverlay.classList.add('show');
+  }
+}
+
+function markActivity(){
+  const now = Date.now();
+  // スリープ復帰などで長時間経過していた場合は、最終操作時刻を更新する前に判定する
+  if (now - lastActivityAt >= IDLE_LIMIT_MS) checkIdlePause();
+  lastActivityAt = now;
+}
+['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart'].forEach(evt => {
+  document.addEventListener(evt, markActivity, { capture: true, passive: true });
+});
+setInterval(checkIdlePause, 10 * 1000);
+
+document.getElementById('idlePauseResumeBtn').addEventListener('click', () => {
+  idlePausedIds.forEach(id => {
+    if (tasks[id] && getTaskRunState(tasks[id]) === 'paused') resumeTaskNow(id);
+  });
+  idlePausedIds = [];
+  idlePauseOverlay.classList.remove('show');
+});
+document.getElementById('idlePauseCloseBtn').addEventListener('click', () => {
+  idlePausedIds = [];
+  idlePauseOverlay.classList.remove('show');
+});
 
 /* ---------- 初期化 ---------- */
 document.getElementById('ganttDate').value = todayStr();
