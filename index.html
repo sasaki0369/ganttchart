@@ -1333,6 +1333,7 @@ function computeElapsedMinutes(t){
 
 /* ---------- 今すぐ開始 ---------- */
 function startTaskNow(id){
+  openTimerPip(); // 常に手前のミニウィンドウ（クリック操作内で開く必要あり）
   startSystemIdleDetector(true); // 初回のみ許可を求める（クリック操作内で呼ぶ必要あり）
   const t = tasks[id];
   if (!t) return;
@@ -1357,6 +1358,7 @@ function pauseTaskNow(id, endIso){
 
 /* ---------- 再開 ---------- */
 function resumeTaskNow(id){
+  openTimerPip();
   startSystemIdleDetector(true);
   const t = tasks[id];
   if (!t) return;
@@ -2010,6 +2012,120 @@ document.getElementById('idlePauseCloseBtn').addEventListener('click', () => {
   idlePausedIds = [];
   idlePauseOverlay.classList.remove('show');
 });
+
+
+/* ---------- 実行中タイマー表示（画面右上の小窓＋常に手前のミニウィンドウ） ---------- */
+const TW_CSS = `
+.tw-rows{display:flex;flex-direction:column;gap:4px}
+.tw-row{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #FF945A;border-radius:12px;padding:4px 6px 4px 10px;font-family:inherit;font-size:12px;color:#5a4636;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.tw-row.paused{border-color:#e0a000;background:#FFF3C4;animation:twBlink 1.6s ease-in-out infinite}
+.tw-dot{width:8px;height:8px;border-radius:50%;background:#3cb371;flex:none;animation:twBlink 1.2s ease-in-out infinite}
+.tw-row.paused .tw-dot{background:#e0a000}
+.tw-name{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.tw-time{font-variant-numeric:tabular-nums;font-weight:700;color:#FF6A1F;min-width:42px;text-align:right}
+.tw-row button,.tw-pin{border:none;background:#FFE8D6;color:#5a4636;border-radius:8px;min-width:26px;height:24px;font-size:13px;cursor:pointer;padding:0 6px}
+.tw-row button:hover,.tw-pin:hover{background:#FFD0B0}
+.tw-row .tw-fin{background:#FF945A;color:#fff}
+@keyframes twBlink{50%{opacity:.55}}
+`;
+(() => { const st = document.createElement('style'); st.textContent = TW_CSS +
+  '#timerBadge{position:fixed;top:6px;right:6px;z-index:900;display:none;flex-direction:column;align-items:flex-end;gap:3px;opacity:.96}'; document.head.appendChild(st); })();
+const twBadge = document.createElement('div');
+twBadge.id = 'timerBadge';
+twBadge.innerHTML = '<div class="tw-rows" id="twRows"></div><button class="tw-pin" id="twPin" title="常に手前に表示するミニウィンドウを開く" style="display:none">📌 常に手前に</button>';
+document.body.appendChild(twBadge);
+const twRowsMain = twBadge.querySelector('#twRows');
+const twPinBtn = twBadge.querySelector('#twPin');
+let twPip = null, twPipRows = null;
+if ('documentPictureInPicture' in window) twPinBtn.style.display = '';
+
+function twWorkedMs(t){
+  const now = Date.now();
+  return (t.workSegments || []).reduce((sum, seg) => sum + ((seg.end ? new Date(seg.end).getTime() : now) - new Date(seg.start).getTime()), 0);
+}
+function twFmt(ms){
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  const p = n => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`;
+}
+function twActiveList(){
+  return Object.entries(tasks).filter(([id, t]) => {
+    const st = getTaskRunState(t);
+    if (st === 'running') return true;
+    if (st === 'paused') { // 一時停止のまま放置されがちなので、12時間以内は表示し続ける
+      const last = t.workSegments[t.workSegments.length - 1];
+      return Date.now() - new Date(last.end).getTime() < 12 * 3600 * 1000;
+    }
+    return false;
+  });
+}
+function twRender(container, list){
+  const sig = list.map(([id, t]) => id + getTaskRunState(t) + t.name).join('|');
+  if (container._sig !== sig) {
+    container._sig = sig;
+    container.innerHTML = list.map(([id, t]) => {
+      const paused = getTaskRunState(t) === 'paused';
+      return `<div class="tw-row ${paused ? 'paused' : 'running'}"><span class="tw-dot"></span>` +
+        `<span class="tw-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</span>` +
+        `<span class="tw-time" data-time="${id}"></span>` +
+        (paused ? `<button data-act="resume" data-id="${id}" title="再開">▶</button>` : `<button data-act="pause" data-id="${id}" title="一時停止">⏸</button>`) +
+        `<button class="tw-fin" data-act="finish" data-id="${id}" title="終了（完了）">✓</button></div>`;
+    }).join('');
+  }
+  list.forEach(([id, t]) => {
+    const el = container.querySelector(`[data-time="${id}"]`);
+    if (el) el.textContent = twFmt(twWorkedMs(t));
+  });
+}
+function twHandleClick(e){
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (!tasks[id]) return;
+  if (btn.dataset.act === 'pause') pauseTaskNow(id);
+  else if (btn.dataset.act === 'resume') resumeTaskNow(id);
+  else if (btn.dataset.act === 'finish') finishTaskNow(id);
+  setTimeout(twUpdate, 150);
+}
+twRowsMain.addEventListener('click', twHandleClick);
+
+function twUpdate(){
+  const list = isPcLikeDevice() ? twActiveList() : [];
+  twBadge.style.display = (list.length && !twPip) ? 'flex' : 'none';
+  twRender(twRowsMain, list);
+  if (twPip && twPipRows) {
+    if (!list.length) { try { twPip.close(); } catch (e) {} }
+    else twRender(twPipRows, list);
+  }
+  // ブラウザのタブ名にも経過時間を表示
+  const running = list.find(([id, t]) => getTaskRunState(t) === 'running');
+  document.title = running ? `⏱ ${twFmt(twWorkedMs(running[1]))} ${running[1].name} - やることガントチャート`
+                           : (list.length ? '⏸ 一時停止中 - やることガントチャート' : 'やることガントチャート');
+}
+setInterval(twUpdate, 1000);
+
+/* 常に手前に表示されるミニウィンドウ（Document Picture-in-Picture。Chrome/Edge 116以降）。クリック等の操作内で呼ぶ */
+async function openTimerPip(){
+  if (!('documentPictureInPicture' in window) || twPip || !isPcLikeDevice()) return;
+  try {
+    const w = await documentPictureInPicture.requestWindow({ width: 330, height: 90 });
+    const st = w.document.createElement('style');
+    st.textContent = TW_CSS + 'body{margin:0;padding:6px;background:#FFF8F0;font-family:"Hiragino Sans","Meiryo",sans-serif;overflow:auto}';
+    w.document.head.appendChild(st);
+    w.document.title = 'やることタイマー';
+    twPipRows = w.document.createElement('div');
+    twPipRows.className = 'tw-rows';
+    twPipRows.addEventListener('click', twHandleClick);
+    w.document.body.appendChild(twPipRows);
+    w.addEventListener('pagehide', () => { twPip = null; twPipRows = null; twUpdate(); });
+    twPip = w;
+    twUpdate();
+  } catch (e) {
+    console.warn('ミニウィンドウを開けませんでした:', e);
+  }
+}
+twPinBtn.addEventListener('click', openTimerPip);
 
 /* ---------- 初期化 ---------- */
 document.getElementById('ganttDate').value = todayStr();
