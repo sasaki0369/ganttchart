@@ -538,13 +538,14 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
   <div class="modal">
     <h2>実績を記録</h2>
     <div class="field" style="font-weight:700;" id="actualTaskName"></div>
+    <div id="actualNowNote" style="display:none; background:#FFF3E8; border-radius:10px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:var(--ink-soft);"></div>
     <button class="btn secondary" id="planCompleteBtn" style="width:100%; margin-bottom:12px;">📌 予定通り完了</button>
-    <div class="field">
+    <div class="field" id="actualStartField">
       <label>実績開始</label>
       <input type="datetime-local" id="inputActualStart" step="600">
     </div>
     <div class="field">
-      <label>所要時間</label>
+      <label id="actualDurationLabel">所要時間</label>
       <div class="duration-picker">
         <div class="duration-total" id="actualDurationTotalDisplay">1時間</div>
         <div class="duration-chips">
@@ -1264,9 +1265,27 @@ document.getElementById('planCompleteBtn').addEventListener('click', () => {
   setDurationMinutes('inputActualDuration', 'actualDurationTotalDisplay', durationMin);
 });
 
+let actualNowMode = false; // true＝「✓」押下時刻を終了時刻として、所要時間だけ入力する方式
+let actualNowEnd = null;
+function updateActualNowNote(){
+  if (!actualNowMode) return;
+  const dur = parseInt(document.getElementById('inputActualDuration').value, 10) || 0;
+  const start = new Date(actualNowEnd.getTime() - dur * 60000);
+  document.getElementById('actualNowNote').innerHTML =
+    `⏹ 終了：<b>${fmtTime(actualNowEnd.toISOString())}</b>（いま）　▶ 開始：<b>${fmtTime(start.toISOString())}</b>`;
+}
+actualOverlay.addEventListener('click', () => setTimeout(updateActualNowNote, 0), true);
+
 function openActualModal(id){
   currentActualId = id;
   const t = tasks[id];
+  // 未着手のタスクの「✓」＝いま終わった：押した時刻を終了時刻にして、かかった時間を入力する
+  actualNowMode = getTaskRunState(t) === 'notstarted';
+  actualNowEnd = new Date();
+  document.getElementById('actualNowNote').style.display = actualNowMode ? '' : 'none';
+  document.getElementById('planCompleteBtn').style.display = actualNowMode ? 'none' : '';
+  document.getElementById('actualStartField').style.display = actualNowMode ? 'none' : '';
+  document.getElementById('actualDurationLabel').textContent = actualNowMode ? '何分かかりましたか？' : '所要時間';
   document.getElementById('actualTaskName').textContent = t.name;
   const now = roundTo10Min(new Date());
   document.getElementById('inputActualStart').value = t.actualStart ? fmtDateTimeLocal(new Date(t.actualStart)) : (t.planStart ? fmtDateTimeLocal(new Date(t.planStart)) : fmtDateTimeLocal(now));
@@ -1277,6 +1296,7 @@ function openActualModal(id){
     durationMin = Math.round((new Date(t.planEnd) - new Date(t.planStart)) / 60000);
   }
   setDurationMinutes('inputActualDuration', 'actualDurationTotalDisplay', durationMin);
+  updateActualNowNote();
   actualOverlay.classList.add('show');
 }
 
@@ -1285,10 +1305,17 @@ document.getElementById('saveActualBtn').addEventListener('click', () => {
   const t = tasks[id];
   const actualStartVal = document.getElementById('inputActualStart').value;
   const durationMin = parseInt(document.getElementById('inputActualDuration').value, 10);
-  if (!actualStartVal){ alert('開始時刻を入力してください'); return; }
+  let startDate, endDate;
+  if (actualNowMode) {
+    if (!(durationMin > 0)){ alert('かかった時間を選んでください'); return; }
+    endDate = actualNowEnd; // 「✓」を押した時刻を終了時刻とする
+    startDate = new Date(endDate.getTime() - durationMin * 60000);
+  } else {
+    if (!actualStartVal){ alert('開始時刻を入力してください'); return; }
+    startDate = new Date(actualStartVal);
+    endDate = new Date(startDate.getTime() + durationMin * 60000);
+  }
   const wasDone = t.done;
-  const startDate = new Date(actualStartVal);
-  const endDate = new Date(startDate.getTime() + durationMin * 60000);
   const data = Object.assign({}, t, {
     actualStart: startDate.toISOString(),
     actualEnd: endDate.toISOString(),
