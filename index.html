@@ -822,7 +822,7 @@ function gcalPlan(data){
   const enabled = data.gcalEnabled === true && !data.cancelled && hasDate;
   const eventId = data.gcalEventId || null;
   if (!enabled) return { action: eventId ? 'delete' : 'none' };
-  const hash = JSON.stringify(['v2-todo', data.name, data.memo || '', data.rank, data.planStart || null, data.planEnd || null, data.planDateOnly || null]);
+  const hash = JSON.stringify(['v3-todo', !!data.done, data.name, data.memo || '', data.rank, data.planStart || null, data.planEnd || null, data.planDateOnly || null]);
   if (eventId && data.gcalHash === hash) return { action: 'none' };
   return { action: 'upsert', hash };
 }
@@ -830,7 +830,7 @@ function gcalBuildBody(id, data){
   const body = {
     summary: '【ToDo】' + (data.rank === 'P' ? '🏠 ' : '') + (data.name || 'やること'),
     description: (data.memo ? data.memo + '\n\n' : '') + '―やることガントチャート' + (data.rank && data.rank !== 'P' ? `（優先度${data.rank === 'D' ? '備忘' : data.rank}）` : '（プライベート）'),
-    colorId: GCAL_COLOR[data.rank] || '8',
+    colorId: data.done ? '8' : (GCAL_COLOR[data.rank] || '8'), // 完了したらグレー（グラファイト）
     reminders: { useDefault: true },
     extendedProperties: { private: { ganttTaskId: id } }
   };
