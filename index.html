@@ -967,8 +967,20 @@ function gcalUpdateButton(){
 }
 document.getElementById('gcalBtn').addEventListener('click', () => {
   if (gcalGetToken()) {
-    gcalSyncAllPending();
-    gcalToast('📅 連携中です（未反映があれば反映します）');
+    // 連携機能の追加前に登録した今後の予定は、連携チェックがOFFのまま。まとめてONにして登録できる
+    const today = todayStr();
+    const targets = Object.entries(tasks).filter(([id, t]) => {
+      if (t.done || t.cancelled || t.gcalEnabled === true) return false;
+      const key = t.planStart ? toLocalDateStr(new Date(t.planStart)) : (t.planDateOnly || null);
+      return key && key >= today;
+    });
+    if (targets.length && confirm(`今日以降の予定のうち、まだカレンダーに登録していない ${targets.length} 件を、Googleカレンダーに登録しますか？\n（備忘・プライベートも含みます）`)) {
+      targets.forEach(([id, t]) => saveTask(id, Object.assign({}, t, { gcalEnabled: true })));
+      gcalToast(`📅 ${targets.length}件をカレンダーに登録しています…`);
+    } else {
+      gcalSyncAllPending();
+      gcalToast('📅 連携中です（未反映があれば反映します）');
+    }
   } else gcalConnect(false);
 });
 setInterval(() => {
