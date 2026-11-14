@@ -317,6 +317,7 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
     <div class="level-chip">⭐ Lv.<span id="levelNum">1</span></div>
     <div class="streak-chip">🔥 <span id="streakNum">0</span>日連続</div>
     <button id="notifyBtn" class="streak-chip" style="border:none; cursor:pointer; font-family:inherit;">🔔</button>
+    <button id="gcalBtn" class="streak-chip" style="border:none; cursor:pointer; font-family:inherit;" title="Googleカレンダーとの連携">📅 連携する</button>
     <button id="installBtn" class="streak-chip" style="border:none; cursor:pointer; font-family:inherit; display:none;">📲 インストール</button>
   </div>
   <div class="xp-bar-wrap"><div class="xp-bar" id="xpBar" style="width:0%"></div></div>
@@ -494,6 +495,12 @@ main{ padding: 14px; max-width: 900px; margin:0 auto; }
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
         <input type="checkbox" id="inputAlarmEnabled" style="width:auto;" checked>
         🔔 アラームメモに通知（開始5分前 / 期日のみの場合は当日7時）
+      </label>
+    </div>
+    <div class="field">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="inputGcalEnabled" style="width:auto;">
+        📅 Googleカレンダーに登録（日時未定は対象外）
       </label>
     </div>
     <div class="field" id="repeatFrequencyRow" style="display:none;">
@@ -710,6 +717,8 @@ function attachFirebaseListeners(){
     renderList();
     renderGantt();
     scheduleNotifications();
+    gcalUpdateButton();
+    if (gcalGetToken() && Date.now() - gcalFailAt > 60000) gcalSyncAllPending();
   });
   statsRef.on('value', snap => {
     const v = snap.val();
@@ -719,8 +728,12 @@ function attachFirebaseListeners(){
 }
 
 function saveTask(id, data){
+  // カレンダー連携の紐付け情報は、保存の取りこぼしで消えないよう最新値で上書きする
+  const loc = gcalLocal[id];
+  if (loc) { data.gcalEventId = loc.eventId; data.gcalHash = loc.hash; }
   tasksRef.child(id).set(data);
   syncAlarmForTask(id, data);
+  gcalSyncTask(id, data);
 }
 
 /* ---------- アラームメモ連携 ----------
@@ -761,6 +774,208 @@ function syncAlarmForTask(taskId, data){
     imageBase64: ''
   });
 }
+
+/* ---------- Googleカレンダー連携 ----------
+   予定（日時あり／期日のみ）をGoogleカレンダー(primary)に登録・更新・削除する。
+   アクセストークンはGoogleログイン時に「📅 連携する」ボタンで取得（約1時間有効）。
+   タスクには gcalEventId（イベントID）と gcalHash（最後に反映した内容）を保存して重複登録を防ぐ。 */
+const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+const GCAL_API = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+const GCAL_COLOR = { A: '11', B: '6', C: '10', D: '8', P: '3' };
+const gcalLocal = {};     // taskId -> {eventId, hash}（保存完了前の最新状態）
+const gcalLatest = {};    // taskId -> 同期待ちの最新データ（null＝削除済み）
+let gcalChain = Promise.resolve();
+let gcalFailAt = 0;
+let gcalApiAlerted = false;
+
+function gcalWasLinked(){ try { return localStorage.getItem('ganttGcalLinked') === '1'; } catch (e) { return false; } }
+function gcalGetToken(){
+  try {
+    const o = JSON.parse(sessionStorage.getItem('ganttGcalToken') || 'null');
+    if (o && o.exp > Date.now()) return o.t;
+  } catch (e) {}
+  return null;
+}
+function gcalSetToken(t){
+  try { sessionStorage.setItem('ganttGcalToken', JSON.stringify({ t, exp: Date.now() + 55 * 60 * 1000 })); } catch (e) {}
+  try { localStorage.setItem('ganttGcalLinked', '1'); } catch (e) {}
+}
+function gcalClearToken(){ try { sessionStorage.removeItem('ganttGcalToken'); } catch (e) {} }
+
+function gcalToast(msg){
+  let el = document.getElementById('gcalToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'gcalToast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#5a4636;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;z-index:3000;max-width:86vw;transition:opacity .3s;opacity:0;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 3500);
+}
+
+/* 反映すべき内容を決める：upsert / delete / none */
+function gcalPlan(data){
+  const hasDate = !!(data.planStart || data.planDateOnly);
+  const enabled = data.gcalEnabled === true && !data.cancelled && hasDate;
+  const eventId = data.gcalEventId || null;
+  if (!enabled) return { action: eventId ? 'delete' : 'none' };
+  const hash = JSON.stringify([data.name, data.memo || '', data.rank, data.planStart || null, data.planEnd || null, data.planDateOnly || null]);
+  if (eventId && data.gcalHash === hash) return { action: 'none' };
+  return { action: 'upsert', hash };
+}
+function gcalBuildBody(id, data){
+  const body = {
+    summary: (data.rank === 'P' ? '🏠 ' : '') + (data.name || 'やること'),
+    description: (data.memo ? data.memo + '\n\n' : '') + '―やることガントチャート' + (data.rank && data.rank !== 'P' ? `（優先度${data.rank === 'D' ? '備忘' : data.rank}）` : '（プライベート）'),
+    colorId: GCAL_COLOR[data.rank] || '8',
+    reminders: { useDefault: true },
+    extendedProperties: { private: { ganttTaskId: id } }
+  };
+  if (data.planStart) {
+    const st = new Date(data.planStart);
+    const en = data.planEnd ? new Date(data.planEnd) : new Date(st.getTime() + 3600000);
+    body.start = { dateTime: st.toISOString(), timeZone: 'Asia/Tokyo' };
+    body.end = { dateTime: en.toISOString(), timeZone: 'Asia/Tokyo' };
+  } else {
+    const d = data.planDateOnly;
+    const nextDay = toLocalDateStr(new Date(new Date(d + 'T00:00:00').getTime() + 24 * 3600 * 1000));
+    body.start = { date: d };
+    body.end = { date: nextDay };
+  }
+  return body;
+}
+
+class GcalAuthError extends Error {}
+async function gcalFetch(method, eventId, body){
+  const token = gcalGetToken();
+  if (!token) throw new GcalAuthError('token');
+  const res = await fetch(GCAL_API + (eventId ? '/' + encodeURIComponent(eventId) : ''), {
+    method,
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (res.status === 401) { gcalClearToken(); throw new GcalAuthError('401'); }
+  return res;
+}
+
+/* タスクを保存・削除したとき／連携時に呼ぶ。直列実行して重複登録を防ぐ */
+function gcalSyncTask(id, data){
+  if (!data) return;
+  gcalLatest[id] = data;
+  const loc = gcalLocal[id];
+  const view = loc ? Object.assign({}, data, { gcalEventId: loc.eventId, gcalHash: loc.hash }) : data;
+  if (gcalPlan(view).action === 'none') return;
+  if (!gcalGetToken()) {
+    gcalUpdateButton();
+    if (navigator.userActivation && navigator.userActivation.isActive && gcalWasLinked()) {
+      gcalConnect(true); // 操作直後なら自動で再接続を試みる
+    }
+    return;
+  }
+  gcalChain = gcalChain.then(() => gcalRunSync(id)).catch(() => {});
+}
+async function gcalRunSync(id){
+  const data = gcalLatest[id];
+  if (!data) return;
+  const loc = gcalLocal[id];
+  const cur = loc ? Object.assign({}, data, { gcalEventId: loc.eventId, gcalHash: loc.hash }) : data;
+  const plan = gcalPlan(cur);
+  if (plan.action === 'none') return;
+  try {
+    if (plan.action === 'delete') {
+      const res = await gcalFetch('DELETE', cur.gcalEventId);
+      if (!res.ok && res.status !== 404 && res.status !== 410) throw new Error('delete ' + res.status);
+      delete gcalLocal[id];
+      if (tasks[id]) tasksRef.child(id).update({ gcalEventId: null, gcalHash: null });
+    } else {
+      const body = gcalBuildBody(id, cur);
+      let res = null, eventId = cur.gcalEventId;
+      if (eventId) {
+        res = await gcalFetch('PUT', eventId, body);
+        if (res.status === 404 || res.status === 410) { eventId = null; res = null; }
+      }
+      if (!eventId) res = await gcalFetch('POST', null, body);
+      if (!res.ok) {
+        const txt = await res.text();
+        if (res.status === 403 && /has not been used|disabled|accessNotConfigured/i.test(txt) && !gcalApiAlerted) {
+          gcalApiAlerted = true;
+          alert('Google Calendar API が有効になっていません。\nGoogle Cloud Console（プロジェクト life--log）で「Google Calendar API」を有効にしてください。');
+        }
+        throw new Error('upsert ' + res.status + ' ' + txt.slice(0, 120));
+      }
+      const ev = await res.json();
+      gcalLocal[id] = { eventId: ev.id, hash: plan.hash };
+      if (tasks[id]) tasksRef.child(id).update({ gcalEventId: ev.id, gcalHash: plan.hash });
+    }
+    gcalUpdateButton();
+  } catch (e) {
+    gcalFailAt = Date.now();
+    if (e instanceof GcalAuthError) gcalToast('📅 カレンダー連携の期限が切れました。ヘッダーの「再接続」を押してください');
+    else console.warn('カレンダー反映に失敗:', e);
+    gcalUpdateButton();
+  }
+}
+/* タスク削除時：カレンダーの予定も削除 */
+function gcalDeleteForRemovedTask(id, t){
+  gcalLatest[id] = null;
+  const eventId = (gcalLocal[id] && gcalLocal[id].eventId) || (t && t.gcalEventId);
+  if (!eventId || !gcalGetToken()) return;
+  gcalChain = gcalChain.then(() => gcalFetch('DELETE', eventId)).catch(() => {});
+  delete gcalLocal[id];
+}
+function gcalPendingCount(){
+  return Object.entries(tasks).filter(([id, t]) => gcalPlan(t).action !== 'none' && (t.gcalEnabled === true || t.gcalEventId)).length;
+}
+function gcalSyncAllPending(){
+  Object.entries(tasks).forEach(([id, t]) => { if (gcalPlan(t).action !== 'none') gcalSyncTask(id, t); });
+}
+
+/* 連携（Googleに再認証してカレンダーのアクセス権を取得）。ボタン操作の中で呼ぶ */
+let gcalConnecting = false;
+async function gcalConnect(auto){
+  if (gcalConnecting) return;
+  gcalConnecting = true;
+  try {
+    const p = new firebase.auth.GoogleAuthProvider();
+    p.addScope(GCAL_SCOPE);
+    p.setCustomParameters({ login_hint: ALLOWED_EMAIL });
+    const user = auth.currentUser;
+    const result = user ? await user.reauthenticateWithPopup(p) : await auth.signInWithPopup(p);
+    const token = result && result.credential && result.credential.accessToken;
+    if (!token) throw new Error('no token');
+    gcalSetToken(token);
+    gcalToast('📅 Googleカレンダーと連携しました');
+    gcalUpdateButton();
+    gcalSyncAllPending();
+  } catch (e) {
+    console.warn('カレンダー連携に失敗:', e);
+    if (!auto) alert('Googleカレンダーとの連携に失敗しました。\nポップアップを許可し、カレンダーの権限を許可してください。\n（' + ((e && e.code) || (e && e.message) || '') + '）');
+  } finally {
+    gcalConnecting = false;
+  }
+}
+function gcalUpdateButton(){
+  const btn = document.getElementById('gcalBtn');
+  if (!btn) return;
+  const pending = gcalPendingCount();
+  if (gcalGetToken()) btn.textContent = pending ? `📅 連携中（${pending}件反映中）` : '📅 連携中';
+  else if (gcalWasLinked()) btn.textContent = pending ? `📅 再接続（${pending}件未反映）` : '📅 再接続';
+  else btn.textContent = '📅 連携する';
+}
+document.getElementById('gcalBtn').addEventListener('click', () => {
+  if (gcalGetToken()) {
+    gcalSyncAllPending();
+    gcalToast('📅 連携中です（未反映があれば反映します）');
+  } else gcalConnect(false);
+});
+setInterval(() => {
+  gcalUpdateButton();
+  // 期限切れ前に読み込んだ直後など、未反映が残っていれば再試行（失敗直後は60秒空ける）
+  if (gcalGetToken() && Date.now() - gcalFailAt > 60000) gcalSyncAllPending();
+}, 30000);
 function saveStats(){
   statsRef.set(stats);
 }
@@ -973,6 +1188,7 @@ document.getElementById('fabAdd').addEventListener('click', () => {
   setCategory('work');
   document.getElementById('inputRepeatEnabled').checked = false;
   document.getElementById('inputAlarmEnabled').checked = true;
+  document.getElementById('inputGcalEnabled').checked = gcalWasLinked(); // 連携済みなら既定でON
   document.querySelectorAll('#repeatFrequencySelect label').forEach(l => l.classList.remove('active'));
   document.querySelectorAll('#repeatFrequencySelect input').forEach(r => r.checked = false);
   document.querySelector('#repeatFrequencySelect label[data-freq="weekly"]').classList.add('active');
@@ -1177,6 +1393,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
   const memo = document.getElementById('inputMemo').value.trim();
   const repeatEnabled = document.getElementById('inputRepeatEnabled').checked;
   const alarmEnabled = document.getElementById('inputAlarmEnabled').checked;
+  const gcalEnabled = document.getElementById('inputGcalEnabled').checked;
   const freqInput = document.querySelector('#repeatFrequencySelect input:checked');
   const repeatFrequency = freqInput ? freqInput.value : 'weekly';
   const weekdayInput = document.querySelector('#weekdaySelect input:checked');
@@ -1201,6 +1418,7 @@ document.getElementById('saveTaskBtn').addEventListener('click', () => {
     repeatEnabled,
     repeatFrequency: repeatEnabled ? repeatFrequency : null,
     alarmEnabled,
+    gcalEnabled,
     repeatWeekday: weekday,
     repeatStartTime: isRepeatTimeMode ? repeatStartTime : null,
     done: existing.done || false,
@@ -1333,6 +1551,7 @@ document.getElementById('saveActualBtn').addEventListener('click', () => {
 /* ---------- タスク削除 ---------- */
 function deleteTask(id){
   if (confirm('このタスクを削除しますか？')) {
+    gcalDeleteForRemovedTask(id, tasks[id]);
     tasksRef.child(id).remove();
     alarmMemoRef.child('gantt_' + id).remove();
   }
@@ -1460,6 +1679,7 @@ function createNextRecurrence(completedTask){
     memo: completedTask.memo || '',
     images: completedTask.images || null,
     alarmEnabled: completedTask.alarmEnabled,
+    gcalEnabled: completedTask.gcalEnabled === true,
     repeatEnabled: true,
     repeatFrequency: frequency,
     repeatWeekday: completedTask.repeatWeekday,
@@ -1775,6 +1995,7 @@ function openEditModal(t){
   const repeatFrequency = t.repeatFrequency || 'weekly';
   document.getElementById('inputRepeatEnabled').checked = repeatEnabled;
   document.getElementById('inputAlarmEnabled').checked = (t.alarmEnabled !== false);
+  document.getElementById('inputGcalEnabled').checked = (t.gcalEnabled === true);
   document.querySelectorAll('#repeatFrequencySelect label').forEach(l => {
     const active = l.dataset.freq === repeatFrequency;
     l.classList.toggle('active', active);
