@@ -620,6 +620,34 @@ function hideAuthOverlay(){
   const el = document.getElementById('authLoadingOverlay');
   if (el) el.style.display = 'none';
 }
+let authRedirectChecked = false;
+function showLoginButton(){
+  const el = document.getElementById('authLoadingOverlay');
+  if (!el) return;
+  el.style.display = 'flex';
+  el.innerHTML = '<div style="font-size:40px;">🔐</div><div style="font-weight:700; color:var(--ink);">Googleアカウントでログインしてください</div>' +
+    '<button id="loginBtn" class="btn primary" style="margin-top:12px;">Googleでログイン</button>';
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    auth.signInWithPopup(googleProvider).catch((err) => {
+      console.warn('signInWithPopup failed:', err && err.code);
+      // ポップアップが使えない環境のみ、リダイレクト方式にフォールバック
+      if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment')) {
+        auth.signInWithRedirect(googleProvider);
+      }
+    });
+  });
+}
+// リダイレクト方式で戻ってきた場合の結果を先に処理（カレンダー連携のトークンもここで受け取る）
+auth.getRedirectResult().then((r) => {
+  let wantsGcal = false;
+  try { wantsGcal = sessionStorage.getItem('ganttGcalRedirect') === '1'; sessionStorage.removeItem('ganttGcalRedirect'); } catch (e) {}
+  const token = r && r.credential && r.credential.accessToken;
+  if (wantsGcal && token) { gcalSetToken(token); setTimeout(() => { gcalToast('📅 Googleカレンダーと連携しました'); gcalUpdateButton(); gcalSyncAllPending(); }, 1500); }
+}).catch((e) => console.warn('getRedirectResult:', e && e.code)).finally(() => {
+  authRedirectChecked = true;
+  if (!auth.currentUser) showLoginButton();
+});
+
 function showAuthMessage(emoji, text){
   const el = document.getElementById('authLoadingOverlay');
   if (el) {
@@ -636,13 +664,9 @@ auth.onAuthStateChanged(user => {
     showAuthMessage('🚫', 'このGoogleアカウントでは利用できません');
     auth.signOut();
   } else {
-    showAuthMessage('🔐', 'Googleアカウントでログインしています…');
-    // まずポップアップでログインを試み、ブロックされた場合のみリダイレクト方式にフォールバック
-    // （Chromeのサードパーティストレージ制限でリダイレクト方式だけだとログインループになるため）
-    auth.signInWithPopup(googleProvider).catch((err) => {
-      console.warn('signInWithPopup failed, falling back to redirect:', err && err.code);
-      auth.signInWithRedirect(googleProvider);
-    });
+    // ポップアップは「ボタンを押した操作の中」でないとスマホでブロックされるため、ログインボタンを表示して開始する
+    // （自動でポップアップ→ブロック→リダイレクト、を繰り返すログインループを避ける）
+    if (authRedirectChecked) showLoginButton();
   }
 });
 
@@ -943,7 +967,19 @@ async function gcalConnect(auto){
     p.addScope(GCAL_SCOPE);
     p.setCustomParameters({ login_hint: ALLOWED_EMAIL });
     const user = auth.currentUser;
-    const result = user ? await user.reauthenticateWithPopup(p) : await auth.signInWithPopup(p);
+    let result;
+    try {
+      // ボタンを押した操作の中で最初に呼ぶ（スマホのポップアップブロック対策）
+      result = user ? await user.reauthenticateWithPopup(p) : await auth.signInWithPopup(p);
+    } catch (e) {
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') && !auto && user) {
+        // ポップアップが使えない場合は、同じタブでGoogleの画面に移動して戻ってくる方式に切り替える
+        try { sessionStorage.setItem('ganttGcalRedirect', '1'); } catch (e2) {}
+        await user.reauthenticateWithRedirect(p);
+        return;
+      }
+      throw e;
+    }
     const token = result && result.credential && result.credential.accessToken;
     if (!token) throw new Error('no token');
     gcalSetToken(token);
