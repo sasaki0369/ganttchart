@@ -6,6 +6,8 @@
 <title>やることガントチャート</title>
 
 <!-- ホーム画面追加用アイコン・PWA設定 -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://life--log-default-rtdb.asia-southeast1.firebasedatabase.app" crossorigin>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="data:image/png;base64,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">
 <link rel="icon" href="data:image/png;base64,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">
@@ -729,6 +731,24 @@ const ENCOURAGE_MSGS = {
 };
 
 let tasks = {};
+/* 起動の高速化：前回のタスク一覧（画像を除く軽量版）を端末に保存しておき、起動直後に表示する。
+   最新データ（Firebase）が届くまでの間は、データを書き換える操作を止めて画像の消失を防ぐ */
+const TASKS_CACHE_KEY = 'ganttTasksCacheV1';
+let tasksFromCache = false;
+(() => {
+  try {
+    const c = JSON.parse(localStorage.getItem(TASKS_CACHE_KEY) || 'null');
+    if (c && typeof c === 'object' && Object.keys(c).length) { tasks = c; tasksFromCache = true; }
+  } catch (e) {}
+})();
+function saveTasksCache(){
+  try {
+    const light = {};
+    Object.entries(tasks).forEach(([id, t]) => { light[id] = Object.assign({}, t, { images: null, image: null }); });
+    const json = JSON.stringify(light);
+    if (json.length < 3000000) localStorage.setItem(TASKS_CACHE_KEY, json);
+  } catch (e) {}
+}
 let stats = { xp:0, level:1, streak:0, bestStreak:0, lastDoneDate:null, totalDone:0, onTimeCount:0, rankADone:0, badges:{} };
 let currentEditId = null;
 let currentActualId = null;
@@ -738,6 +758,8 @@ let currentFilter = 'ALL';
 function attachFirebaseListeners(){
   tasksRef.on('value', snap => {
     tasks = snap.val() || {};
+    tasksFromCache = false;
+    saveTasksCache();
     renderList();
     renderGantt();
     scheduleNotifications();
@@ -752,6 +774,7 @@ function attachFirebaseListeners(){
 }
 
 function saveTask(id, data){
+  if (tasksFromCache) { gcalToast('⏳ 最新データを読み込み中です。少し待ってからもう一度操作してください'); return; }
   // カレンダー連携の紐付け情報は、保存の取りこぼしで消えないよう最新値で上書きする
   const loc = gcalLocal[id];
   if (loc) { data.gcalEventId = loc.eventId; data.gcalHash = loc.hash; }
@@ -2425,6 +2448,7 @@ twPinBtn.addEventListener('click', openTimerPip);
 
 /* ---------- 初期化 ---------- */
 document.getElementById('ganttDate').value = todayStr();
+if (tasksFromCache) hideAuthOverlay(); // 前回データを先に表示（未ログインならログイン画面が再表示される）
 renderList();
 renderGantt();
 renderStats();
